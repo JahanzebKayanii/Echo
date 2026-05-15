@@ -1,0 +1,415 @@
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from typing import List
+import models
+import schemas
+from database import engine, get_db, SessionLocal
+from auth import hash_password, verify_password, create_access_token, get_current_user
+from deepgram import DeepgramClient, PrerecordedOptions
+import anthropic
+import os
+import time
+import io
+import re
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+import openpyxl
+
+def format_time(seconds):
+    m = int(seconds // 60)
+    s = int(seconds % 60)
+    return f"{m}:{s:02d}"
+
+def build_transcript_text(transcripts):
+    return "\n".join([
+        f"{t.speaker_label or t.speaker} [{format_time(t.start_time)}]: {t.edited_text or t.text}"
+        for t in transcripts
+    ])
+
+models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Echo API")
+
+_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "app": "Echo"}
+
+@app.post("/auth/register", response_model=schemas.UserResponse)
+def register(body: schemas.UserCreate, db: Session = Depends(get_db)):
+    if db.query(models.User).filter(models.User.email == body.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user = models.User(email=body.email, hashed_password=hash_password(body.password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@app.post("/auth/login", response_model=schemas.Token)
+def login(body: schemas.UserCreate, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == body.email).first()
+    if not user or not verify_password(body.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"access_token": create_access_token(user.email), "token_type": "bearer"}
+
+@app.post("/meetings", response_model=schemas.MeetingResponse)
+def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_meeting = models.Meeting(**meeting.model_dump(), user_id=current_user.id)
+    db.add(db_meeting)
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
+
+@app.get("/meetings", response_model=List[schemas.MeetingResponse])
+def list_meetings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return db.query(models.Meeting).filter(models.Meeting.user_id == current_user.id).order_by(models.Meeting.created_at.desc()).all()
+
+@app.get("/meetings/{meeting_id}", response_model=schemas.MeetingResponse)
+def get_meeting(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return meeting
+
+@app.delete("/meetings/{meeting_id}")
+def delete_meeting(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    db.delete(meeting)
+    db.commit()
+    return {"message": "Meeting deleted"}
+
+@app.post("/meetings/{meeting_id}/audio", response_model=schemas.MeetingResponse)
+async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    os.makedirs("uploads", exist_ok=True)
+    ext = file.filename.split(".")[-1] if "." in file.filename else "webm"
+    filename = f"{meeting_id}_{int(time.time())}.{ext}"
+    filepath = os.path.join("uploads", filename)
+
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    meeting.audio_path = filepath
+    meeting.status = "processing"
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+def run_transcription(filepath: str, meeting_id: int):
+    db = SessionLocal()
+    try:
+        deepgram = DeepgramClient(os.getenv("DEEPGRAM_API_KEY"))
+
+        with open(filepath, "rb") as f:
+            buffer_data = f.read()
+
+        options = PrerecordedOptions(
+            model="nova-2",
+            diarize=True,
+            punctuate=True,
+            utterances=True,
+        )
+
+        response = deepgram.listen.rest.v("1").transcribe_file(
+            {"buffer": buffer_data},
+            options,
+        )
+
+        utterances = response.results.utterances or []
+        for u in utterances:
+            segment = models.Transcript(
+                meeting_id=meeting_id,
+                speaker=f"Speaker {u.speaker}",
+                text=u.transcript,
+                start_time=u.start,
+                end_time=u.end,
+            )
+            db.add(segment)
+
+        meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+        if meeting:
+            meeting.status = "completed"
+        db.commit()
+
+    except Exception as e:
+        print(f"Transcription error: {e}")
+        meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+        if meeting:
+            meeting.status = "error"
+        db.commit()
+    finally:
+        db.close()
+
+@app.post("/meetings/{meeting_id}/transcribe")
+def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if not meeting.audio_path:
+        raise HTTPException(status_code=400, detail="No audio uploaded yet")
+
+    background_tasks.add_task(run_transcription, meeting.audio_path, meeting_id)
+    return {"message": "Transcription started"}
+
+@app.get("/meetings/{meeting_id}/transcripts", response_model=List[schemas.TranscriptResponse])
+def get_transcripts(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return (
+        db.query(models.Transcript)
+        .filter(models.Transcript.meeting_id == meeting_id)
+        .order_by(models.Transcript.start_time)
+        .all()
+    )
+
+@app.patch("/transcripts/{transcript_id}", response_model=schemas.TranscriptResponse)
+def update_transcript(transcript_id: int, body: schemas.TranscriptUpdate, db: Session = Depends(get_db)):
+    transcript = db.query(models.Transcript).filter(models.Transcript.id == transcript_id).first()
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    if body.edited_text is not None:
+        transcript.edited_text = body.edited_text
+    db.commit()
+    db.refresh(transcript)
+    return transcript
+
+@app.patch("/meetings/{meeting_id}/notes", response_model=schemas.MeetingResponse)
+def update_notes(meeting_id: int, body: schemas.MeetingNotesUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    meeting.notes = body.notes
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+@app.post("/meetings/{meeting_id}/rename-speaker")
+def rename_speaker(meeting_id: int, body: schemas.RenameSpeakerRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).all()
+    for t in transcripts:
+        current = t.speaker_label or t.speaker
+        if current == body.old_name:
+            t.speaker_label = body.new_name
+    db.commit()
+    return {"message": "Speaker renamed"}
+
+@app.post("/meetings/{meeting_id}/summarize", response_model=schemas.MeetingResponse)
+def summarize_meeting(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).order_by(models.Transcript.start_time).all()
+
+    if not transcripts:
+        raise HTTPException(status_code=400, detail="No transcript available")
+
+    transcript_text = build_transcript_text(transcripts)
+
+    client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": f"Provide a concise summary of this meeting. Include: main topics discussed, key decisions, and action items if any.\n\nTranscript:\n{transcript_text}"
+        }]
+    )
+
+    meeting.summary = response.content[0].text
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+@app.post("/meetings/{meeting_id}/chat")
+def chat_with_meeting(meeting_id: int, body: schemas.ChatRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).order_by(models.Transcript.start_time).all()
+
+    transcript_text = build_transcript_text(transcripts)
+
+    history = db.query(models.ChatMessage).filter(
+        models.ChatMessage.meeting_id == meeting_id
+    ).order_by(models.ChatMessage.created_at).all()
+
+    user_msg = models.ChatMessage(meeting_id=meeting_id, role="user", content=body.message)
+    db.add(user_msg)
+    db.commit()
+
+    messages = [{"role": m.role, "content": m.content} for m in history]
+    messages.append({"role": "user", "content": body.message})
+
+    client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        system=f"You are an AI assistant analyzing a meeting transcript. Answer questions based on the transcript only.\n\nTranscript:\n{transcript_text}",
+        messages=messages
+    )
+
+    ai_text = response.content[0].text
+    assistant_msg = models.ChatMessage(meeting_id=meeting_id, role="assistant", content=ai_text)
+    db.add(assistant_msg)
+    db.commit()
+
+    return {"response": ai_text}
+
+@app.get("/meetings/{meeting_id}/chat", response_model=List[schemas.ChatMessageResponse])
+def get_chat_history(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return db.query(models.ChatMessage).filter(
+        models.ChatMessage.meeting_id == meeting_id
+    ).order_by(models.ChatMessage.created_at).all()
+
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    total_meetings = db.query(models.Meeting).filter(models.Meeting.user_id == current_user.id).count()
+    meeting_ids = [m.id for m in db.query(models.Meeting.id).filter(models.Meeting.user_id == current_user.id)]
+    transcripts = db.query(models.Transcript).filter(models.Transcript.meeting_id.in_(meeting_ids)).all()
+    total_seconds = sum((t.end_time - t.start_time) for t in transcripts)
+    total_hours = round(total_seconds / 3600, 1)
+    return {"total_meetings": total_meetings, "total_hours": total_hours}
+
+@app.get("/meetings/search/query", response_model=List[schemas.MeetingResponse])
+def search_meetings(q: str, db: Session = Depends(get_db)):
+    results = db.query(models.Meeting).filter(
+        models.Meeting.title.ilike(f"%{q}%") | models.Meeting.description.ilike(f"%{q}%")
+    ).order_by(models.Meeting.created_at.desc()).all()
+    return results
+
+def markdown_to_reportlab(text, styles):
+    bullet_style = ParagraphStyle('bullet', parent=styles['Normal'],
+        leftIndent=20, spaceAfter=4, textColor=colors.HexColor('#1a1a2e'))
+    elements = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            elements.append(Spacer(1, 6))
+            continue
+        line = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line)
+        line = re.sub(r'\*(.+?)\*', r'<i>\1</i>', line)
+        if line.startswith('### '):
+            elements.append(Paragraph(line[4:], styles['Heading3']))
+        elif line.startswith('## '):
+            elements.append(Paragraph(line[3:], styles['Heading2']))
+        elif line.startswith('# '):
+            elements.append(Paragraph(line[2:], styles['Heading1']))
+        elif line.startswith(('* ', '- ')):
+            elements.append(Paragraph(f'• {line[2:]}', bullet_style))
+        else:
+            elements.append(Paragraph(line, styles['Normal']))
+        elements.append(Spacer(1, 4))
+    return elements
+
+@app.get("/meetings/{meeting_id}/export/pdf")
+def export_pdf(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).order_by(models.Transcript.start_time).all()
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter)
+    styles = getSampleStyleSheet()
+    watermark_style = ParagraphStyle('watermark', parent=styles['Normal'],
+        textColor=colors.HexColor('#cccccc'), fontSize=8)
+    story = []
+
+    story.append(Paragraph(meeting.title, styles['Title']))
+    story.append(Spacer(1, 12))
+    if meeting.description:
+        story.append(Paragraph(meeting.description, styles['Normal']))
+        story.append(Spacer(1, 12))
+
+    if meeting.summary:
+        story.append(Paragraph("AI Summary", styles['Heading2']))
+        story.extend(markdown_to_reportlab(meeting.summary, styles))
+        story.append(Spacer(1, 12))
+
+    if transcripts:
+        story.append(Paragraph("Transcript", styles['Heading2']))
+        for t in transcripts:
+            speaker = t.speaker_label or t.speaker
+            text = t.edited_text or t.text
+            story.append(Paragraph(f"<b>{speaker} [{format_time(t.start_time)}]:</b> {text}", styles['Normal']))
+            story.append(Spacer(1, 4))
+
+    story.append(Spacer(1, 24))
+    story.append(Paragraph("Generated by Echo AI", watermark_style))
+    doc.build(story)
+    buf.seek(0)
+
+    safe_title = "".join(c for c in meeting.title if c.isalnum() or c in " -_")
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'})
+
+@app.get("/meetings/{meeting_id}/export/excel")
+def export_excel(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).order_by(models.Transcript.start_time).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Transcript"
+
+    ws.append(["Echo AI Export", "", "", ""])
+    ws.append(["Meeting:", meeting.title, "", ""])
+    if meeting.description:
+        ws.append(["Description:", meeting.description, "", ""])
+    ws.append([])
+
+    if meeting.summary:
+        ws.append(["AI Summary"])
+        ws.append([meeting.summary])
+        ws.append([])
+
+    ws.append(["Speaker", "Start Time", "End Time", "Text"])
+    for t in transcripts:
+        ws.append([
+            t.speaker_label or t.speaker,
+            format_time(t.start_time),
+            format_time(t.end_time),
+            t.edited_text or t.text,
+        ])
+
+    ws.append([])
+    ws.append(["Generated by Echo AI"])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    safe_title = "".join(c for c in meeting.title if c.isalnum() or c in " -_")
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.xlsx"'})
