@@ -375,9 +375,13 @@ def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_us
             "role": "user",
             "content": (
                 f"In this transcript the speakers are labeled: {', '.join(unique_speakers)}. "
-                "Some speakers may say their name or introduce themselves. "
-                "Return a JSON array of objects with \"old_name\" and \"new_name\" for any speaker whose real name you can identify with confidence. "
-                "If no names can be identified, return []. Return ONLY valid JSON, no other text.\n\n"
+                "Identify the real name of each speaker using any of these clues: "
+                "(1) self-introduction: 'Hi I'm David', 'My name is Sarah', "
+                "(2) someone else introduces them: 'This is David', 'Let me introduce Sarah', 'joining us today is John', "
+                "(3) a speaker is addressed by name and then responds next: 'David, can you walk us through...' followed by that speaker's turn. "
+                "Use context — if someone is introduced as David right before a new speaker starts talking, that speaker is David. "
+                "Only include mappings you are confident about. "
+                "Return a JSON array of objects with \"old_name\" and \"new_name\". If none found, return []. Return ONLY valid JSON, no other text.\n\n"
                 f"Transcript:\n{transcript_text}"
             )
         }]
