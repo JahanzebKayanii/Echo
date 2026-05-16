@@ -443,12 +443,13 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
               onToggle={() => toggleSection('transcript')}
               right={
                 <>
-                  {hasRenames && (
+                  {hasRenames ? (
                     <button className="revert-btn" onClick={e => { e.stopPropagation(); resetSpeakers() }}>Reset names</button>
+                  ) : (
+                    <button className="identify-btn" onClick={e => { e.stopPropagation(); identifySpeakers() }} disabled={identifying}>
+                      {identifying ? 'Identifying...' : 'Auto-identify'}
+                    </button>
                   )}
-                  <button className="identify-btn" onClick={e => { e.stopPropagation(); identifySpeakers() }} disabled={identifying}>
-                    {identifying ? 'Identifying...' : 'Auto-identify'}
-                  </button>
                   <button className="copy-btn" onClick={e => { e.stopPropagation(); copyTranscript() }}>Copy all</button>
                 </>
               }
