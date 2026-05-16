@@ -960,18 +960,17 @@ ul {
 
 .password-toggle {
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: none;
   color: #4c4f6b;
-  font-size: 12px;
-  font-weight: 600;
   cursor: pointer;
   padding: 4px;
+  display: flex;
+  align-items: center;
   transition: color 0.2s;
-  letter-spacing: 0.3px;
 }
 
 .password-toggle:hover { color: #a78bfa; }
