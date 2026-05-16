@@ -351,6 +351,17 @@ def rename_speaker(meeting_id: int, body: schemas.RenameSpeakerRequest, db: Sess
     db.commit()
     return {"message": "Speaker renamed"}
 
+@app.post("/meetings/{meeting_id}/reset-speakers")
+def reset_speakers(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    db.query(models.Transcript).filter(models.Transcript.meeting_id == meeting_id).update(
+        {"speaker_label": None}, synchronize_session=False
+    )
+    db.commit()
+    return {"message": "Speakers reset"}
+
 @app.post("/meetings/{meeting_id}/identify-speakers")
 def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
