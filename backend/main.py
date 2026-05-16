@@ -386,23 +386,14 @@ def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_us
             "role": "user",
             "content": (
                 f"Transcript (speaker labels: {', '.join(unique_speakers)}):\n\n{transcript_text}\n\n"
-                "Identify each speaker's real name using only direct evidence.\n"
-                "Valid evidence:\n"
-                "1. The speaker introduces themselves: 'Hi I'm David', 'I'm Sarah', 'My name is John'\n"
-                "2. Another speaker introduces them AND they are the very next person to speak: "
-                "'This is David' then the next turn is David — "
-                "the person DOING the introducing is NOT David, only the next speaker is\n"
-                "3. A speaker is addressed by name and directly responds to that address\n\n"
-                "RULES — read carefully:\n"
-                "- If a speaker says someone's name in the THIRD PERSON using 'he', 'she', 'his', 'her' "
-                "(e.g. 'Paul is the HR manager. He called this meeting.'), "
-                "that speaker is NOT Paul — they are describing Paul. Do NOT map that speaker to Paul.\n"
-                "- If a speaker merely mentions a name without it being directed at them or self-introduced, skip it.\n"
-                "- Only use real person names — not 'Narrator', 'Interviewer', 'Host', or any role.\n"
-                "- If you are not sure, do NOT include that speaker. Wrong is worse than missing.\n\n"
-                f"Use EXACTLY these label strings in old_name: {', '.join(unique_speakers)}\n"
-                "Return ONLY a JSON array: [{\"old_name\": \"Speaker 0\", \"new_name\": \"David\"}, ...]\n"
-                "If no names can be identified, return []"
+                "Look through this transcript and figure out the real name of each speaker where it's reasonably clear. "
+                "Use introductions, self-introductions, being addressed by name, or context. "
+                "One important rule: if a speaker refers to someone in third person ('Paul is the manager, he called this meeting') "
+                "that speaker is NOT Paul — they are describing someone else. "
+                "Don't assign role labels like Narrator or Host, only real names. "
+                f"Use EXACTLY these label strings in old_name: {', '.join(unique_speakers)}. "
+                "Return ONLY a JSON array: [{\"old_name\": \"Speaker 0\", \"new_name\": \"David\"}, ...]. "
+                "If no names are clear, return []."
             )
         }]
     )
