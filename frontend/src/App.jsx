@@ -181,7 +181,7 @@ function App() {
           <h1>Echo</h1>
           <p>AI Conversation Intelligence</p>
           <button className="user-avatar-btn" onClick={() => setShowSettings(false)} title="Back">
-            {userEmail ? userEmail[0].toUpperCase() : '?'}
+            {userEmail ? userEmail[0].toUpperCase() : '💀'}
           </button>
         </header>
         <main className="app-main">
@@ -205,7 +205,7 @@ function App() {
           <h1>Echo</h1>
           <p>AI Conversation Intelligence</p>
           <button className="user-avatar-btn" onClick={() => setShowSettings(true)} title="Settings">
-            {userEmail ? userEmail[0].toUpperCase() : '?'}
+            {userEmail ? userEmail[0].toUpperCase() : '💀'}
           </button>
         </header>
         <main className="app-main">
@@ -227,7 +227,7 @@ function App() {
         <h1>Echo</h1>
         <p>AI Conversation Intelligence</p>
         <button className="user-avatar-btn" onClick={() => setShowSettings(true)} title="Settings">
-          {userEmail ? userEmail[0].toUpperCase() : '?'}
+          {userEmail ? userEmail[0].toUpperCase() : '💀'}
         </button>
       </header>
 
@@ -250,7 +250,7 @@ function App() {
               <div className="stat-item usage-item">
                 <div className="usage-header">
                   <span className="stat-label">Meetings Used</span>
-                  <span className="usage-fraction">{stats.total_meetings} / {stats.meeting_limit}</span>
+                  <span className="usage-fraction">{stats.total_meetings} of {stats.meeting_limit}</span>
                 </div>
                 <div className="usage-bar-track">
                   <div

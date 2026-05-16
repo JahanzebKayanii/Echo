@@ -1,12 +1,23 @@
 import { useState } from 'react'
 
+function nameFromEmail(email) {
+  if (!email) return ''
+  const local = email.split('@')[0]
+  const name = local.split(/[\d._-]/)[0]
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : ''
+}
+
 export default function SettingsPage({ onBack, onLogout, onDeleteAccount, stats, userEmail }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const name = nameFromEmail(userEmail)
 
   return (
     <div className="settings-page">
       <button className="back-btn" onClick={onBack}>← Back</button>
-      <h1 className="settings-title">Settings</h1>
+      <div className="settings-greeting">
+        <h1 className="settings-title">Settings</h1>
+        {name && <p className="settings-hello">Hello, {name}</p>}
+      </div>
 
       <div className="settings-card">
         <h2 className="settings-card-title">Account</h2>
@@ -42,7 +53,7 @@ export default function SettingsPage({ onBack, onLogout, onDeleteAccount, stats,
                       style={{ width: `${Math.min((stats.total_meetings / stats.meeting_limit) * 100, 100)}%` }}
                     />
                   </div>
-                  <span className="usage-fraction">{stats.total_meetings} / {stats.meeting_limit}</span>
+                  <span className="usage-fraction">{stats.total_meetings} of {stats.meeting_limit}</span>
                 </div>
               </div>
               <div className="settings-row">

@@ -1048,7 +1048,9 @@ ul {
 
 /* ── Settings page ── */
 .settings-page { max-width: 560px; margin: 0 auto; padding-bottom: 60px; }
-.settings-title { font-size: 24px; font-weight: 700; color: #e2e8f0; margin: 8px 0 24px; }
+.settings-greeting { margin: 8px 0 24px; }
+.settings-title { font-size: 24px; font-weight: 700; color: #e2e8f0; margin: 0 0 4px; }
+.settings-hello { font-size: 14px; color: #64748b; margin: 0; }
 
 .settings-card {
   background: #141428;
