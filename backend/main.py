@@ -390,7 +390,8 @@ def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_us
     raw = response.content[0].text.strip()
     print(f"[identify-speakers] Claude raw response: {raw}")
     try:
-        mappings = json.loads(raw.replace("```json", "").replace("```", "").strip())
+        match = re.search(r'\[.*\]', raw, re.DOTALL)
+        mappings = json.loads(match.group(0)) if match else []
         if not isinstance(mappings, list):
             mappings = []
     except Exception as e:
