@@ -387,8 +387,8 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
         </div>
       )}
 
-      {/* Transcribe — shown after upload, once loading is done, if no transcript yet */}
-      {uploaded && !loadingTranscripts && !hasTranscript && (
+      {/* Transcribe — shown after upload, once loading is done, if no transcript yet, and not completed */}
+      {uploaded && !loadingTranscripts && !hasTranscript && currentMeeting.status !== 'completed' && (
         <div className="detail-section">
           <SectionHeader title="Transcript" isOpen onToggle={() => {}} />
           <div className="section-body">
