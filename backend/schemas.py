@@ -84,6 +84,10 @@ class ResetPasswordRequest(BaseModel):
 class GoogleAuthRequest(BaseModel):
     token: str
 
+class OAuthCodeRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
 class ChatRequest(BaseModel):
     message: str
 

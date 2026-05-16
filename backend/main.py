@@ -144,6 +144,68 @@ async def google_auth(body: schemas.GoogleAuthRequest, db: Session = Depends(get
 
     return {"access_token": create_access_token(user.email), "token_type": "bearer"}
 
+@app.post("/auth/github", response_model=schemas.Token)
+async def github_auth(body: schemas.OAuthCodeRequest, db: Session = Depends(get_db)):
+    import secrets
+    client_id = os.getenv("GITHUB_CLIENT_ID")
+    client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            "https://github.com/login/oauth/access_token",
+            json={"client_id": client_id, "client_secret": client_secret, "code": body.code, "redirect_uri": body.redirect_uri},
+            headers={"Accept": "application/json"},
+        )
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=401, detail="GitHub auth failed")
+        user_resp = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {access_token}"})
+        emails_resp = await client.get("https://api.github.com/user/emails", headers={"Authorization": f"Bearer {access_token}"})
+    user_data = user_resp.json()
+    email = next((e["email"] for e in emails_resp.json() if e.get("primary") and e.get("verified")), user_data.get("email"))
+    if not email:
+        raise HTTPException(status_code=400, detail="No email found in GitHub account")
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        user = models.User(email=email, hashed_password=hash_password(secrets.token_hex(32)), is_verified=True, name=user_data.get("name") or user_data.get("login") or None)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif not user.is_verified:
+        user.is_verified = True
+        db.commit()
+    return {"access_token": create_access_token(user.email), "token_type": "bearer"}
+
+@app.post("/auth/microsoft", response_model=schemas.Token)
+async def microsoft_auth(body: schemas.OAuthCodeRequest, db: Session = Depends(get_db)):
+    import secrets
+    client_id = os.getenv("MICROSOFT_CLIENT_ID")
+    client_secret = os.getenv("MICROSOFT_CLIENT_SECRET")
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            data={"client_id": client_id, "client_secret": client_secret, "code": body.code, "redirect_uri": body.redirect_uri, "grant_type": "authorization_code", "scope": "User.Read openid email profile"},
+        )
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=401, detail="Microsoft auth failed")
+        user_resp = await client.get("https://graph.microsoft.com/v1.0/me", headers={"Authorization": f"Bearer {access_token}"})
+    user_data = user_resp.json()
+    email = user_data.get("mail") or user_data.get("userPrincipalName")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email found in Microsoft account")
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        user = models.User(email=email, hashed_password=hash_password(secrets.token_hex(32)), is_verified=True, name=user_data.get("givenName") or user_data.get("displayName") or None)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif not user.is_verified:
+        user.is_verified = True
+        db.commit()
+    return {"access_token": create_access_token(user.email), "token_type": "bearer"}
+
 @app.post("/auth/login", response_model=schemas.Token)
 def login(body: schemas.UserCreate, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == body.email).first()

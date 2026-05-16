@@ -5,7 +5,7 @@ import LandingPage from './components/LandingPage'
 import LegalPage from './components/LegalPage'
 import SettingsPage from './components/SettingsPage'
 import { useToast, ToastContainer } from './components/Toast'
-import { apiFetch, getToken, clearToken } from './api'
+import { apiFetch, getToken, setToken, clearToken, API } from './api'
 import './App.css'
 
 function formatDuration(seconds) {
@@ -37,6 +37,22 @@ function App() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
   const { toasts, showToast } = useToast()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const state = params.get('state')
+    if (code && (state === 'github' || state === 'microsoft')) {
+      window.history.replaceState({}, '', '/')
+      fetch(`${API}/auth/${state}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, redirect_uri: window.location.origin }),
+      }).then(r => r.json()).then(data => {
+        if (data.access_token) { setToken(data.access_token); setLoggedIn(true) }
+      }).catch(() => {})
+    }
+  }, [])
 
   useEffect(() => {
     if (loggedIn) {
