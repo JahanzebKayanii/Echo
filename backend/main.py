@@ -375,6 +375,44 @@ def summarize_meeting(meeting_id: int, db: Session = Depends(get_db), current_us
     db.refresh(meeting)
     return meeting
 
+@app.post("/meetings/{meeting_id}/action-items", response_model=schemas.MeetingResponse)
+def extract_action_items(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).order_by(models.Transcript.start_time).all()
+
+    if not transcripts:
+        raise HTTPException(status_code=400, detail="No transcript available")
+
+    transcript_text = build_transcript_text(transcripts)
+
+    client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Extract all action items from this meeting transcript. "
+                "For each action item return a JSON object with: "
+                "\"person\" (who is responsible, or \"Unassigned\"), "
+                "\"task\" (what needs to be done), "
+                "\"deadline\" (when, or null if not mentioned). "
+                "Return ONLY a valid JSON array, no other text.\n\n"
+                f"Transcript:\n{transcript_text}"
+            )
+        }]
+    )
+
+    meeting.action_items = response.content[0].text.strip()
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
 @app.post("/meetings/{meeting_id}/chat")
 def chat_with_meeting(meeting_id: int, body: schemas.ChatRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()

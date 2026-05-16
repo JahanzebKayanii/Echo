@@ -29,6 +29,7 @@ class Meeting(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     meeting_date = Column(Date, nullable=True)
     duration_seconds = Column(Float, nullable=True)
+    action_items = Column(Text, nullable=True)
 
 class Transcript(Base):
     __tablename__ = "transcripts"

@@ -27,6 +27,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
   const [currentMeeting, setCurrentMeeting] = useState(meeting)
   const [notes, setNotes] = useState(meeting.notes || '')
   const [summarizing, setSummarizing] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(meeting.title)
   const pollRef = useRef(null)
@@ -119,6 +120,25 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
     onUpdate(updated)
     setSummarizing(false)
     showToast('Summary generated')
+  }
+
+  async function extractActionItems() {
+    setExtracting(true)
+    const res = await apiFetch(`/meetings/${meeting.id}/action-items`, { method: 'POST' })
+    const updated = await res.json()
+    setCurrentMeeting(updated)
+    onUpdate(updated)
+    setExtracting(false)
+    showToast('Action items extracted')
+  }
+
+  function parseActionItems(raw) {
+    try {
+      const cleaned = raw.replace(/```json|```/g, '').trim()
+      return JSON.parse(cleaned)
+    } catch {
+      return []
+    }
   }
 
   async function saveTitle() {
@@ -280,6 +300,40 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
           ) : (
             <button className="summarize-btn" onClick={generateSummary} disabled={summarizing}>
               {summarizing ? <><span className="spinner" /> Generating summary...</> : 'Generate Summary'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {transcripts.length > 0 && (
+        <div className="action-items-section">
+          <h3>Action Items</h3>
+          {currentMeeting.action_items ? (
+            <>
+              {parseActionItems(currentMeeting.action_items).length === 0 ? (
+                <p className="action-items-empty">No action items found in this meeting.</p>
+              ) : (
+                <ul className="action-items-list">
+                  {parseActionItems(currentMeeting.action_items).map((item, i) => (
+                    <li key={i} className="action-item">
+                      <div className="action-item-task">{item.task}</div>
+                      <div className="action-item-meta">
+                        <span className="action-item-person">{item.person}</span>
+                        {item.deadline && (
+                          <span className="action-item-deadline">due {item.deadline}</span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button className="summarize-btn" style={{ marginTop: '14px' }} onClick={extractActionItems} disabled={extracting}>
+                {extracting ? <><span className="spinner" /> Extracting...</> : 'Re-extract'}
+              </button>
+            </>
+          ) : (
+            <button className="summarize-btn" onClick={extractActionItems} disabled={extracting}>
+              {extracting ? <><span className="spinner" /> Extracting...</> : 'Extract Action Items'}
             </button>
           )}
         </div>

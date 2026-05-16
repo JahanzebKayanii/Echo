@@ -42,6 +42,7 @@ class MeetingResponse(BaseModel):
     meeting_date: Optional[DateType] = None
     duration_seconds: Optional[float] = None
     user_id: Optional[int] = None
+    action_items: Optional[str] = None
 
     class Config:
         from_attributes = True
