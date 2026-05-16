@@ -1253,6 +1253,22 @@ ul {
 
 .copy-btn:hover { border-color: #a78bfa; color: #a78bfa; }
 
+/* ── Auto-identify speakers button ── */
+.identify-btn {
+  background: transparent;
+  border: 1px solid #2d3148;
+  color: #64748b;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  margin-right: 6px;
+}
+.identify-btn:hover:not(:disabled) { border-color: #34d399; color: #34d399; }
+.identify-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── ESC hint on back button ── */
 .esc-hint {
   font-size: 10px;

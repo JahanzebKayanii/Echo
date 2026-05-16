@@ -15,6 +15,7 @@ import os
 import time
 import io
 import re
+import json
 import httpx
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -322,6 +323,8 @@ def update_meeting(meeting_id: int, body: schemas.MeetingUpdate, db: Session = D
         meeting.description = body.description
     if body.meeting_date is not None:
         meeting.meeting_date = body.meeting_date
+    if body.tags is not None:
+        meeting.tags = body.tags
     db.commit()
     db.refresh(meeting)
     return meeting
@@ -347,6 +350,58 @@ def rename_speaker(meeting_id: int, body: schemas.RenameSpeakerRequest, db: Sess
             t.speaker_label = body.new_name
     db.commit()
     return {"message": "Speaker renamed"}
+
+@app.post("/meetings/{meeting_id}/identify-speakers")
+def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    transcripts = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id
+    ).order_by(models.Transcript.start_time).all()
+
+    if not transcripts:
+        raise HTTPException(status_code=400, detail="No transcript available")
+
+    transcript_text = build_transcript_text(transcripts)
+    unique_speakers = list(dict.fromkeys(t.speaker_label or t.speaker for t in transcripts))
+
+    client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=512,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"In this transcript the speakers are labeled: {', '.join(unique_speakers)}. "
+                "Some speakers may say their name or introduce themselves. "
+                "Return a JSON array of objects with \"old_name\" and \"new_name\" for any speaker whose real name you can identify with confidence. "
+                "If no names can be identified, return []. Return ONLY valid JSON, no other text.\n\n"
+                f"Transcript:\n{transcript_text}"
+            )
+        }]
+    )
+
+    try:
+        mappings = json.loads(response.content[0].text.strip().replace("```json", "").replace("```", "").strip())
+        if not isinstance(mappings, list):
+            mappings = []
+    except Exception:
+        mappings = []
+
+    applied = 0
+    for mapping in mappings:
+        old = (mapping.get("old_name") or "").strip()
+        new = (mapping.get("new_name") or "").strip()
+        if old and new and old != new:
+            for t in transcripts:
+                if (t.speaker_label or t.speaker) == old:
+                    t.speaker_label = new
+            applied += 1
+
+    db.commit()
+    return {"count": applied, "mappings": mappings}
 
 @app.post("/meetings/{meeting_id}/summarize", response_model=schemas.MeetingResponse)
 def summarize_meeting(meeting_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

@@ -35,10 +35,15 @@ function computeSpeakerStats(transcripts) {
     .sort((a, b) => b.secs - a.secs)
 }
 
-function colorForSpeaker(speaker) {
-  const digits = speaker.replace(/\D/g, '')
-  const index = digits ? parseInt(digits) % SPEAKER_COLORS.length : 0
-  return SPEAKER_COLORS[index]
+function buildSpeakerColorMap(transcripts) {
+  const seen = []
+  transcripts.forEach(t => {
+    const name = t.speaker_label || t.speaker
+    if (!seen.includes(name)) seen.push(name)
+  })
+  const map = {}
+  seen.forEach((name, i) => { map[name] = SPEAKER_COLORS[i % SPEAKER_COLORS.length] })
+  return map
 }
 
 function formatTime(seconds) {
@@ -73,6 +78,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
   const [openSections, setOpenSections] = useState({})
   const [language, setLanguage] = useState(meeting.language || 'en')
   const [tagInput, setTagInput] = useState('')
+  const [identifying, setIdentifying] = useState(false)
   const pollRef = useRef(null)
 
   useEffect(() => {
@@ -275,6 +281,24 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
     showToast('Notes saved')
   }
 
+  async function identifySpeakers() {
+    setIdentifying(true)
+    try {
+      const res = await apiFetch(`/meetings/${meeting.id}/identify-speakers`, { method: 'POST' })
+      const data = await res.json()
+      await fetchTranscripts()
+      if (data.count > 0) {
+        showToast(`Identified ${data.count} speaker${data.count > 1 ? 's' : ''}`)
+      } else {
+        showToast('No speaker names found in the transcript', 'error')
+      }
+    } catch {
+      showToast('Could not identify speakers', 'error')
+    }
+    setIdentifying(false)
+  }
+
+  const speakerColors = buildSpeakerColorMap(transcripts)
   const hasTranscript = transcripts.length > 0
 
   return (
@@ -391,7 +415,14 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
               title="Transcript"
               isOpen={openSections.transcript}
               onToggle={() => toggleSection('transcript')}
-              right={<button className="copy-btn" onClick={e => { e.stopPropagation(); copyTranscript() }}>Copy all</button>}
+              right={
+                <>
+                  <button className="identify-btn" onClick={e => { e.stopPropagation(); identifySpeakers() }} disabled={identifying}>
+                    {identifying ? 'Identifying...' : 'Auto-identify'}
+                  </button>
+                  <button className="copy-btn" onClick={e => { e.stopPropagation(); copyTranscript() }}>Copy all</button>
+                </>
+              }
             />
             {openSections.transcript && (
               <div className="section-body">
@@ -401,7 +432,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
                     <TranscriptLine
                       key={t.id}
                       transcript={t}
-                      color={colorForSpeaker(t.speaker_label || t.speaker)}
+                      color={speakerColors[t.speaker_label || t.speaker]}
                       onRenameSpeaker={handleRenameSpeaker}
                       onTextSaved={fetchTranscripts}
                     />
@@ -420,15 +451,15 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
             />
             {openSections.speakers && (
               <div className="section-body">
-                {computeSpeakerStats(transcripts).map((s, i) => (
+                {computeSpeakerStats(transcripts).map((s) => (
                   <div key={s.name} className="speaker-stat-row">
-                    <span className="speaker-stat-name" style={{ color: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}>
+                    <span className="speaker-stat-name" style={{ color: speakerColors[s.name] }}>
                       {s.name}
                     </span>
                     <div className="speaker-stat-bar-track">
                       <div
                         className="speaker-stat-bar-fill"
-                        style={{ width: `${s.pct}%`, background: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}
+                        style={{ width: `${s.pct}%`, background: speakerColors[s.name] }}
                       />
                     </div>
                     <span className="speaker-stat-pct">{s.pct}%</span>
