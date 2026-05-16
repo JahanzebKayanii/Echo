@@ -958,26 +958,23 @@ ul {
   width: 100%;
 }
 
-.password-toggle {
+.auth-form .password-toggle {
   position: absolute;
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
   background: #13151f;
   border: none;
-  color: #4c4f6b;
+  color: #94a3b8;
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
   width: 28px;
   height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: color 0.2s;
 }
-
-.password-toggle:hover { color: #a78bfa; }
 
 .auth-form button {
   background: linear-gradient(135deg, #7c3aed, #6d28d9);
