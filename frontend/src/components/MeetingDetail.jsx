@@ -41,8 +41,16 @@ function buildSpeakerColorMap(transcripts) {
     const name = t.speaker_label || t.speaker
     if (!seen.includes(name)) seen.push(name)
   })
+  // Sort "Speaker N" entries numerically so Speaker 0 always gets color 0,
+  // Speaker 2 always gets color 2, etc. regardless of who speaks first.
+  // Renamed speakers (non "Speaker N") keep their first-appearance order after.
+  const speakerN = seen.filter(n => /^Speaker \d+$/.test(n)).sort((a, b) => {
+    return parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0])
+  })
+  const renamed = seen.filter(n => !/^Speaker \d+$/.test(n))
+  const ordered = [...speakerN, ...renamed]
   const map = {}
-  seen.forEach((name, i) => { map[name] = SPEAKER_COLORS[i % SPEAKER_COLORS.length] })
+  ordered.forEach((name, i) => { map[name] = SPEAKER_COLORS[i % SPEAKER_COLORS.length] })
   return map
 }
 
