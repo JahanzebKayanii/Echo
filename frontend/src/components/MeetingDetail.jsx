@@ -19,6 +19,18 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+function SectionHeader({ title, isOpen, onToggle, right }) {
+  return (
+    <button className="section-toggle" onClick={onToggle}>
+      <span className="section-toggle-left">
+        <span className={`section-chevron ${isOpen ? 'open' : ''}`}>›</span>
+        {title}
+      </span>
+      {right && <span className="section-toggle-right">{right}</span>}
+    </button>
+  )
+}
+
 export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = () => {} }) {
   const [uploading, setUploading] = useState(false)
   const [uploaded, setUploaded] = useState(!!meeting.audio_path)
@@ -30,6 +42,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
   const [extracting, setExtracting] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(meeting.title)
+  const [openSections, setOpenSections] = useState({})
   const pollRef = useRef(null)
 
   useEffect(() => {
@@ -54,6 +67,15 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
     return () => window.removeEventListener('keydown', handler)
   }, [editingTitle, onBack])
 
+  function toggleSection(name) {
+    const isOpening = !openSections[name]
+    setOpenSections(prev => ({ ...prev, [name]: !prev[name] }))
+    if (isOpening) {
+      if (name === 'summary' && !currentMeeting.summary && !summarizing) generateSummary()
+      if (name === 'actions' && !currentMeeting.action_items && !extracting) extractActionItems()
+    }
+  }
+
   async function fetchTranscripts() {
     const res = await apiFetch(`/meetings/${meeting.id}/transcripts`)
     const data = await res.json()
@@ -77,6 +99,12 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
       method: 'POST',
       body: formData,
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.detail || 'Upload failed.', 'error')
+      setUploading(false)
+      return
+    }
     const updated = await res.json()
     setUploading(false)
     setUploaded(true)
@@ -134,8 +162,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
 
   function parseActionItems(raw) {
     try {
-      const cleaned = raw.replace(/```json|```/g, '').trim()
-      return JSON.parse(cleaned)
+      return JSON.parse(raw.replace(/```json|```/g, '').trim())
     } catch {
       return []
     }
@@ -187,12 +214,15 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
     showToast('Notes saved')
   }
 
+  const hasTranscript = transcripts.length > 0
+
   return (
     <div className="detail-view">
       <button className="back-btn" onClick={onBack}>
         ← Back <span className="esc-hint">esc</span>
       </button>
 
+      {/* Header */}
       <div className="detail-header">
         {editingTitle ? (
           <input
@@ -207,11 +237,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
             autoFocus
           />
         ) : (
-          <h2
-            className="detail-title"
-            onClick={() => setEditingTitle(true)}
-            title="Click to rename"
-          >
+          <h2 className="detail-title" onClick={() => setEditingTitle(true)} title="Click to rename">
             {currentMeeting.title}
             <span className="edit-icon">✎</span>
           </h2>
@@ -231,144 +257,183 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
         </div>
       </div>
 
-      <div className="audio-section">
-        <h3>Audio</h3>
-        {uploaded ? (
-          <div className="audio-done">Audio saved.</div>
-        ) : (
-          <div className="audio-options">
-            <RecordButton onRecordingComplete={uploadAudio} disabled={uploading} />
-            <div className="or-divider">or</div>
-            <label className="upload-label">
-              Upload Audio File (.mp3, .wav, .m4a, .mp4)
-              <input
-                type="file"
-                accept=".mp3,.wav,.m4a,.webm,.mp4"
-                onChange={handleFileUpload}
-                hidden
-              />
-            </label>
-            {uploading && <p className="uploading-text">Uploading audio...</p>}
-          </div>
-        )}
-      </div>
-
-      {uploaded && transcripts.length === 0 && (
-        <div className="transcribe-section">
-          <h3>Transcript</h3>
-          {transcribing ? (
-            <div className="transcribing-status">
-              <span className="spinner" />
-              Transcribing — this takes about 30–60 seconds...
+      {/* Audio — always visible until uploaded */}
+      {!uploaded && (
+        <div className="detail-section">
+          <SectionHeader title="Audio" isOpen onToggle={() => {}} />
+          <div className="section-body">
+            <div className="audio-options">
+              <RecordButton onRecordingComplete={uploadAudio} disabled={uploading} />
+              <div className="or-divider">or</div>
+              <label className="upload-label">
+                Upload Audio File (.mp3, .wav, .m4a, .mp4)
+                <input type="file" accept=".mp3,.wav,.m4a,.webm,.mp4" onChange={handleFileUpload} hidden />
+              </label>
+              {uploading && <p className="uploading-text">Uploading audio...</p>}
             </div>
-          ) : (
-            <button className="transcribe-btn" onClick={startTranscription}>
-              Transcribe Audio
-            </button>
-          )}
-        </div>
-      )}
-
-      {transcripts.length > 0 && (
-        <div className="transcript-section">
-          <div className="section-header-row">
-            <h3>Transcript</h3>
-            <button className="copy-btn" onClick={copyTranscript}>Copy all</button>
           </div>
-          <p className="edit-instructions">Click any speaker name to rename · Click any line to edit text</p>
-          <ul className="transcript-list">
-            {transcripts.map(t => (
-              <TranscriptLine
-                key={t.id}
-                transcript={t}
-                color={colorForSpeaker(t.speaker_label || t.speaker)}
-                onRenameSpeaker={handleRenameSpeaker}
-                onTextSaved={fetchTranscripts}
-              />
-            ))}
-          </ul>
         </div>
       )}
 
-      {transcripts.length > 0 && (
-        <div className="summary-section">
-          <h3>AI Summary</h3>
-          {currentMeeting.summary ? (
-            <div className="summary-text">
-              <ReactMarkdown>{currentMeeting.summary}</ReactMarkdown>
-            </div>
-          ) : (
-            <button className="summarize-btn" onClick={generateSummary} disabled={summarizing}>
-              {summarizing ? <><span className="spinner" /> Generating summary...</> : 'Generate Summary'}
-            </button>
-          )}
+      {/* Transcribe — shown after upload, before transcript exists */}
+      {uploaded && !hasTranscript && (
+        <div className="detail-section">
+          <SectionHeader title="Transcript" isOpen onToggle={() => {}} />
+          <div className="section-body">
+            {transcribing ? (
+              <div className="transcribing-status">
+                <span className="spinner" />
+                Transcribing — this takes about 30–60 seconds...
+              </div>
+            ) : (
+              <button className="transcribe-btn" onClick={startTranscription}>
+                Transcribe Audio
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {transcripts.length > 0 && (
-        <div className="action-items-section">
-          <h3>Action Items</h3>
-          {currentMeeting.action_items ? (
-            <>
-              {parseActionItems(currentMeeting.action_items).length === 0 ? (
-                <p className="action-items-empty">No action items found in this meeting.</p>
-              ) : (
-                <ul className="action-items-list">
-                  {parseActionItems(currentMeeting.action_items).map((item, i) => (
-                    <li key={i} className="action-item">
-                      <div className="action-item-task">{item.task}</div>
-                      <div className="action-item-meta">
-                        <span className="action-item-person">{item.person}</span>
-                        {item.deadline && (
-                          <span className="action-item-deadline">due {item.deadline}</span>
-                        )}
-                      </div>
-                    </li>
+      {/* Collapsible sections — only when transcript exists */}
+      {hasTranscript && (
+        <>
+          {/* Transcript */}
+          <div className="detail-section">
+            <SectionHeader
+              title="Transcript"
+              isOpen={openSections.transcript}
+              onToggle={() => toggleSection('transcript')}
+              right={<button className="copy-btn" onClick={e => { e.stopPropagation(); copyTranscript() }}>Copy all</button>}
+            />
+            {openSections.transcript && (
+              <div className="section-body">
+                <p className="edit-instructions">Click any speaker name to rename · Click any line to edit text</p>
+                <ul className="transcript-list">
+                  {transcripts.map(t => (
+                    <TranscriptLine
+                      key={t.id}
+                      transcript={t}
+                      color={colorForSpeaker(t.speaker_label || t.speaker)}
+                      onRenameSpeaker={handleRenameSpeaker}
+                      onTextSaved={fetchTranscripts}
+                    />
                   ))}
                 </ul>
-              )}
-              <button className="summarize-btn" style={{ marginTop: '14px' }} onClick={extractActionItems} disabled={extracting}>
-                {extracting ? <><span className="spinner" /> Extracting...</> : 'Re-extract'}
-              </button>
-            </>
-          ) : (
-            <button className="summarize-btn" onClick={extractActionItems} disabled={extracting}>
-              {extracting ? <><span className="spinner" /> Extracting...</> : 'Extract Action Items'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {transcripts.length > 0 && (
-        <div className="chat-section">
-          <h3>Ask Echo AI</h3>
-          <ChatPanel meetingId={meeting.id} />
-        </div>
-      )}
-
-      {transcripts.length > 0 && (
-        <div className="notes-section">
-          <h3>Meeting Notes</h3>
-          <textarea
-            className="notes-input"
-            placeholder="Add notes about this meeting..."
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            onBlur={saveNotes}
-            rows={5}
-          />
-          <p className="notes-hint">Auto-saves when you click away</p>
-        </div>
-      )}
-
-      {transcripts.length > 0 && (
-        <div className="export-section">
-          <h3>Export</h3>
-          <div className="export-buttons">
-            <button className="export-btn" onClick={() => downloadExport('pdf')}>Download PDF</button>
-            <button className="export-btn export-btn-excel" onClick={() => downloadExport('excel')}>Download Excel</button>
+              </div>
+            )}
           </div>
-        </div>
+
+          {/* AI Summary */}
+          <div className="detail-section">
+            <SectionHeader
+              title="AI Summary"
+              isOpen={openSections.summary}
+              onToggle={() => toggleSection('summary')}
+            />
+            {openSections.summary && (
+              <div className="section-body">
+                {summarizing ? (
+                  <div className="transcribing-status"><span className="spinner" />Generating summary…</div>
+                ) : currentMeeting.summary ? (
+                  <div className="summary-text">
+                    <ReactMarkdown>{currentMeeting.summary}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="section-empty">No summary yet.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Action Items */}
+          <div className="detail-section">
+            <SectionHeader
+              title="Action Items"
+              isOpen={openSections.actions}
+              onToggle={() => toggleSection('actions')}
+            />
+            {openSections.actions && (
+              <div className="section-body">
+                {extracting ? (
+                  <div className="transcribing-status"><span className="spinner" />Extracting action items…</div>
+                ) : currentMeeting.action_items ? (
+                  parseActionItems(currentMeeting.action_items).length === 0 ? (
+                    <p className="action-items-empty">No action items found in this meeting.</p>
+                  ) : (
+                    <ul className="action-items-list">
+                      {parseActionItems(currentMeeting.action_items).map((item, i) => (
+                        <li key={i} className="action-item">
+                          <div className="action-item-task">{item.task}</div>
+                          <div className="action-item-meta">
+                            <span className="action-item-person">{item.person}</span>
+                            {item.deadline && (
+                              <span className="action-item-deadline">due {item.deadline}</span>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                ) : (
+                  <p className="section-empty">No action items yet.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Chat */}
+          <div className="detail-section">
+            <SectionHeader
+              title="Ask Echo AI"
+              isOpen={openSections.chat}
+              onToggle={() => toggleSection('chat')}
+            />
+            {openSections.chat && (
+              <div className="section-body">
+                <ChatPanel meetingId={meeting.id} />
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div className="detail-section">
+            <SectionHeader
+              title="Meeting Notes"
+              isOpen={openSections.notes}
+              onToggle={() => toggleSection('notes')}
+            />
+            {openSections.notes && (
+              <div className="section-body">
+                <textarea
+                  className="notes-input"
+                  placeholder="Add notes about this meeting..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                  rows={5}
+                />
+                <p className="notes-hint">Auto-saves when you click away</p>
+              </div>
+            )}
+          </div>
+
+          {/* Export */}
+          <div className="detail-section">
+            <SectionHeader
+              title="Export"
+              isOpen={openSections.export}
+              onToggle={() => toggleSection('export')}
+            />
+            {openSections.export && (
+              <div className="section-body">
+                <div className="export-buttons">
+                  <button className="export-btn" onClick={() => downloadExport('pdf')}>Download PDF</button>
+                  <button className="export-btn export-btn-excel" onClick={() => downloadExport('excel')}>Download Excel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   )

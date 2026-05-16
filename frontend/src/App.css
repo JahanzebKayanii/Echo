@@ -1644,6 +1644,68 @@ ul {
   color: #3d4466;
 }
 
+/* ── Collapsible sections ── */
+.detail-section {
+  background: linear-gradient(135deg, #1e2130, #1a1d2e);
+  border: 1px solid #2d3148;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.detail-section:has(.section-toggle:hover) { border-color: #4c4f6b; }
+
+.section-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #f1f5f9;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.section-toggle:hover { background: rgba(45, 49, 72, 0.4); }
+
+.section-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-toggle-right { display: flex; align-items: center; }
+
+.section-chevron {
+  font-size: 18px;
+  color: #3d4466;
+  transition: transform 0.2s, color 0.2s;
+  display: inline-block;
+  line-height: 1;
+}
+
+.section-chevron.open {
+  transform: rotate(90deg);
+  color: #a78bfa;
+}
+
+.section-body {
+  padding: 0 22px 22px;
+  border-top: 1px solid #252840;
+}
+
+.section-empty {
+  color: #3d4466;
+  font-size: 14px;
+  padding-top: 4px;
+}
+
 /* ── Action Items ── */
 .action-items-list {
   list-style: none;
