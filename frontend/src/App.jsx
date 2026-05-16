@@ -21,6 +21,7 @@ function App() {
   const [showAuth, setShowAuth] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [userName, setUserName] = useState('')
   const [legalPage, setLegalPage] = useState(null)
   const [meetings, setMeetings] = useState([])
   const [title, setTitle] = useState('')
@@ -41,7 +42,7 @@ function App() {
     if (loggedIn) {
       fetchMeetings()
       fetchStats()
-      apiFetch('/auth/me').then(r => r.json()).then(d => setUserEmail(d.email || ''))
+      apiFetch('/auth/me').then(r => r.json()).then(d => { setUserEmail(d.email || ''); setUserName(d.name || '') })
     }
   }, [loggedIn])
 
@@ -127,6 +128,7 @@ function App() {
     setStats(null)
     setShowSettings(false)
     setUserEmail('')
+    setUserName('')
   }
 
   async function handleDeleteAccount() {
@@ -191,6 +193,7 @@ function App() {
             onDeleteAccount={handleDeleteAccount}
             stats={stats}
             userEmail={userEmail}
+            userName={userName}
           />
         </main>
       </div>

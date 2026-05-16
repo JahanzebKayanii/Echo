@@ -36,6 +36,14 @@ def build_transcript_text(transcripts):
 
 models.Base.metadata.create_all(bind=engine)
 
+from sqlalchemy import text as _text
+with engine.connect() as _conn:
+    try:
+        _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR"))
+        _conn.commit()
+    except Exception:
+        pass
+
 app = FastAPI(title="Echo API")
 
 _origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
@@ -86,14 +94,14 @@ def health_check():
 
 @app.get("/auth/me")
 def get_me(current_user: models.User = Depends(get_current_user)):
-    return {"email": current_user.email, "is_pro": current_user.is_pro}
+    return {"email": current_user.email, "is_pro": current_user.is_pro, "name": current_user.name or ""}
 
 @app.post("/auth/register", response_model=schemas.UserResponse)
 def register(body: schemas.UserCreate, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     token = generate_token()
-    user = models.User(email=body.email, hashed_password=hash_password(body.password), verification_token=token, is_verified=False)
+    user = models.User(email=body.email, hashed_password=hash_password(body.password), verification_token=token, is_verified=False, name=body.name or None)
     db.add(user)
     db.commit()
     db.refresh(user)

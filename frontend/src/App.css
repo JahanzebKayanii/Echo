@@ -180,6 +180,16 @@ input:focus, textarea:focus {
 input::placeholder, textarea::placeholder { color: #3d4466; }
 textarea { resize: vertical; }
 
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #13151f inset !important;
+  box-shadow: 0 0 0 1000px #13151f inset !important;
+  -webkit-text-fill-color: #e2e8f0 !important;
+  caret-color: #e2e8f0;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 button[type="submit"] {
   background: linear-gradient(135deg, #7c3aed, #6d28d9);
   color: white;

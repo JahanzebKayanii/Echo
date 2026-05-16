@@ -4,6 +4,7 @@ import { API, setToken } from '../api'
 export default function LoginPage({ onLogin, onBack, onLegal }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState('')
@@ -75,7 +76,7 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
       const res = await fetch(`${API}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(mode === 'register' ? { email, password, name: name.trim() || null } : { email, password }),
       })
       const data = await res.json()
 
@@ -88,6 +89,7 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
         setInfo('Account created! Check your email to verify before signing in.')
         setMode('login')
         setEmail('')
+        setName('')
         setPassword('')
         return
       }
@@ -159,6 +161,14 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
             )}
 
             <form className="auth-form" onSubmit={handleSubmit}>
+              {mode === 'register' && (
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+              )}
               {(mode === 'login' || mode === 'register' || mode === 'forgot') && (
                 <input
                   type="email"

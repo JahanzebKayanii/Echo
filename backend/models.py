@@ -14,6 +14,7 @@ class User(Base):
     verification_token = Column(String, nullable=True)
     reset_token = Column(String, nullable=True)
     reset_token_expires = Column(DateTime(timezone=True), nullable=True)
+    name = Column(String, nullable=True)
 
 class Meeting(Base):
     __tablename__ = "meetings"

@@ -7,9 +7,9 @@ function nameFromEmail(email) {
   return name ? name.charAt(0).toUpperCase() + name.slice(1) : ''
 }
 
-export default function SettingsPage({ onBack, onLogout, onDeleteAccount, stats, userEmail }) {
+export default function SettingsPage({ onBack, onLogout, onDeleteAccount, stats, userEmail, userName }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const name = nameFromEmail(userEmail)
+  const name = userName || nameFromEmail(userEmail)
 
   return (
     <div className="settings-page">
@@ -21,6 +21,12 @@ export default function SettingsPage({ onBack, onLogout, onDeleteAccount, stats,
 
       <div className="settings-card">
         <h2 className="settings-card-title">Account</h2>
+        {userName && (
+          <div className="settings-row">
+            <span className="settings-label">Name</span>
+            <span className="settings-value">{userName}</span>
+          </div>
+        )}
         <div className="settings-row">
           <span className="settings-label">Email</span>
           <span className="settings-value">{userEmail}</span>
