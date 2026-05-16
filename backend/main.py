@@ -374,35 +374,44 @@ def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_us
         messages=[{
             "role": "user",
             "content": (
-                f"In this transcript the speakers are labeled: {', '.join(unique_speakers)}. "
-                "Identify the real name of each speaker using any of these clues: "
-                "(1) self-introduction: 'Hi I'm David', 'My name is Sarah', "
-                "(2) someone else introduces them: 'This is David', 'Let me introduce Sarah', 'joining us today is John', "
-                "(3) a speaker is addressed by name and then responds next: 'David, can you walk us through...' followed by that speaker's turn. "
-                "Use context — if someone is introduced as David right before a new speaker starts talking, that speaker is David. "
-                "Only include mappings you are confident about. "
-                "Return a JSON array of objects with \"old_name\" and \"new_name\". If none found, return []. Return ONLY valid JSON, no other text.\n\n"
-                f"Transcript:\n{transcript_text}"
+                f"Transcript (speaker labels: {', '.join(unique_speakers)}):\n\n{transcript_text}\n\n"
+                "Identify each speaker's real name using these clues:\n"
+                "1. Self-introduction: 'Hi I'm David', 'I'm Sarah', 'My name is John'\n"
+                "2. Someone introduces another: 'This is David', 'Meet Sarah', 'Joining us is John' — "
+                "the NEXT speaker after the introduction is that person\n"
+                "3. Direct address then response: 'David, can you...' followed by that speaker's next turn\n\n"
+                f"Use EXACTLY these label strings in old_name: {', '.join(unique_speakers)}\n"
+                "Return ONLY a JSON array: [{\"old_name\": \"Speaker 0\", \"new_name\": \"David\"}, ...]\n"
+                "If no names found, return []"
             )
         }]
     )
 
+    raw = response.content[0].text.strip()
+    print(f"[identify-speakers] Claude raw response: {raw}")
     try:
-        mappings = json.loads(response.content[0].text.strip().replace("```json", "").replace("```", "").strip())
+        mappings = json.loads(raw.replace("```json", "").replace("```", "").strip())
         if not isinstance(mappings, list):
             mappings = []
-    except Exception:
+    except Exception as e:
+        print(f"[identify-speakers] JSON parse error: {e}")
         mappings = []
+
+    print(f"[identify-speakers] Parsed mappings: {mappings}")
 
     applied = 0
     for mapping in mappings:
         old = (mapping.get("old_name") or "").strip()
         new = (mapping.get("new_name") or "").strip()
         if old and new and old != new:
+            renamed = False
             for t in transcripts:
-                if (t.speaker_label or t.speaker) == old:
+                current = (t.speaker_label or t.speaker).strip()
+                if current.lower() == old.lower():
                     t.speaker_label = new
-            applied += 1
+                    renamed = True
+            if renamed:
+                applied += 1
 
     db.commit()
     return {"count": applied, "mappings": mappings}
