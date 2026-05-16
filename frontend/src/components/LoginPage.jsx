@@ -11,6 +11,7 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
   const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const [resetToken, setResetToken] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -179,23 +180,43 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
                 />
               )}
               {(mode === 'login' || mode === 'register') && (
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                />
+                <div className="password-wrap">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(v => !v)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               )}
               {mode === 'reset' && (
-                <input
-                  type="password"
-                  placeholder="New password"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  required
-                  minLength={8}
-                />
+                <div className="password-wrap">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="New password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(v => !v)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               )}
 
               {error && <p className="auth-error">{error}</p>}
