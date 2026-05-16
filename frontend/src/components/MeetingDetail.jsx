@@ -7,6 +7,34 @@ import { apiFetch } from '../api'
 
 const SPEAKER_COLORS = ['#a78bfa', '#34d399', '#f472b6', '#60a5fa', '#fb923c']
 
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'zh', label: 'Chinese (Mandarin)' },
+  { code: 'ar', label: 'Arabic' },
+]
+
+function computeSpeakerStats(transcripts) {
+  const totals = {}
+  transcripts.forEach(t => {
+    const name = t.speaker_label || t.speaker
+    if (!totals[name]) totals[name] = 0
+    totals[name] += t.end_time - t.start_time
+  })
+  const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0)
+  return Object.entries(totals)
+    .map(([name, secs]) => ({ name, secs, pct: grandTotal ? Math.round((secs / grandTotal) * 100) : 0 }))
+    .sort((a, b) => b.secs - a.secs)
+}
+
 function colorForSpeaker(speaker) {
   const digits = speaker.replace(/\D/g, '')
   const index = digits ? parseInt(digits) % SPEAKER_COLORS.length : 0
@@ -43,6 +71,8 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(meeting.title)
   const [openSections, setOpenSections] = useState({})
+  const [language, setLanguage] = useState(meeting.language || 'en')
+  const [tagInput, setTagInput] = useState('')
   const pollRef = useRef(null)
 
   useEffect(() => {
@@ -120,7 +150,11 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
 
   async function startTranscription() {
     setTranscribing(true)
-    await apiFetch(`/meetings/${meeting.id}/transcribe`, { method: 'POST' })
+    await apiFetch(`/meetings/${meeting.id}/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language }),
+    })
     pollRef.current = setInterval(async () => {
       const m = await fetchMeeting()
       if (m.status === 'completed' || m.status === 'error') {
@@ -166,6 +200,33 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
     } catch {
       return []
     }
+  }
+
+  function currentTags() {
+    return (currentMeeting.tags || '').split(',').map(t => t.trim()).filter(Boolean)
+  }
+
+  async function saveTags(tags) {
+    const res = await apiFetch(`/meetings/${meeting.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: tags.join(',') }),
+    })
+    const updated = await res.json()
+    setCurrentMeeting(updated)
+    onUpdate(updated)
+  }
+
+  async function addTag(e) {
+    if (e.key !== 'Enter' && e.type !== 'blur') return
+    const tag = tagInput.trim().toLowerCase()
+    if (!tag || currentTags().includes(tag)) { setTagInput(''); return }
+    await saveTags([...currentTags(), tag])
+    setTagInput('')
+  }
+
+  async function removeTag(tag) {
+    await saveTags(currentTags().filter(t => t !== tag))
   }
 
   async function saveTitle() {
@@ -243,6 +304,22 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
           </h2>
         )}
         {currentMeeting.description && <p className="detail-desc">{currentMeeting.description}</p>}
+        <div className="detail-tags">
+          {currentTags().map(tag => (
+            <span key={tag} className="tag-pill">
+              {tag}
+              <button className="tag-remove" onClick={() => removeTag(tag)}>×</button>
+            </span>
+          ))}
+          <input
+            className="tag-input"
+            placeholder="+ add tag"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={addTag}
+            onBlur={addTag}
+          />
+        </div>
         <div className="detail-meta">
           {currentMeeting.meeting_date && (
             <span className="meta-date">
@@ -286,9 +363,20 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
                 Transcribing — this takes about 30–60 seconds...
               </div>
             ) : (
-              <button className="transcribe-btn" onClick={startTranscription}>
-                Transcribe Audio
-              </button>
+              <div className="transcribe-row">
+                <select
+                  className="language-select"
+                  value={language}
+                  onChange={e => setLanguage(e.target.value)}
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code}>{l.label}</option>
+                  ))}
+                </select>
+                <button className="transcribe-btn" onClick={startTranscription}>
+                  Transcribe Audio
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -319,6 +407,34 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
                     />
                   ))}
                 </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Speaker Stats */}
+          <div className="detail-section">
+            <SectionHeader
+              title="Speaker Stats"
+              isOpen={openSections.speakers}
+              onToggle={() => toggleSection('speakers')}
+            />
+            {openSections.speakers && (
+              <div className="section-body">
+                {computeSpeakerStats(transcripts).map((s, i) => (
+                  <div key={s.name} className="speaker-stat-row">
+                    <span className="speaker-stat-name" style={{ color: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}>
+                      {s.name}
+                    </span>
+                    <div className="speaker-stat-bar-track">
+                      <div
+                        className="speaker-stat-bar-fill"
+                        style={{ width: `${s.pct}%`, background: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}
+                      />
+                    </div>
+                    <span className="speaker-stat-pct">{s.pct}%</span>
+                    <span className="speaker-stat-time">{formatTime(s.secs)}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>

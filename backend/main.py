@@ -223,7 +223,7 @@ async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Sessio
     db.refresh(meeting)
     return meeting
 
-def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False):
+def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False, language: str = 'en'):
     db = SessionLocal()
     try:
         deepgram = DeepgramClient(os.getenv("DEEPGRAM_API_KEY"))
@@ -236,6 +236,7 @@ def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False):
             diarize=True,
             punctuate=True,
             utterances=True,
+            language=language,
         )
 
         response = deepgram.listen.rest.v("1").transcribe_file(
@@ -278,14 +279,16 @@ def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False):
         db.close()
 
 @app.post("/meetings/{meeting_id}/transcribe")
-def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def transcribe_meeting(meeting_id: int, body: schemas.TranscribeRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if not meeting.audio_path:
         raise HTTPException(status_code=400, detail="No audio uploaded yet")
 
-    background_tasks.add_task(run_transcription, meeting.audio_path, meeting_id, current_user.is_pro)
+    meeting.language = body.language
+    db.commit()
+    background_tasks.add_task(run_transcription, meeting.audio_path, meeting_id, current_user.is_pro, body.language)
     return {"message": "Transcription started"}
 
 @app.get("/meetings/{meeting_id}/transcripts", response_model=List[schemas.TranscriptResponse])
@@ -472,10 +475,26 @@ def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends
     }
 
 @app.get("/meetings/search/query", response_model=List[schemas.MeetingResponse])
-def search_meetings(q: str, db: Session = Depends(get_db)):
-    results = db.query(models.Meeting).filter(
-        models.Meeting.title.ilike(f"%{q}%") | models.Meeting.description.ilike(f"%{q}%")
-    ).order_by(models.Meeting.created_at.desc()).all()
+def search_meetings(q: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    pattern = f"%{q}%"
+    by_title = db.query(models.Meeting).filter(
+        models.Meeting.user_id == current_user.id,
+        models.Meeting.title.ilike(pattern) | models.Meeting.description.ilike(pattern)
+    ).all()
+    transcript_ids = db.query(models.Transcript.meeting_id).filter(
+        models.Transcript.text.ilike(pattern) | models.Transcript.edited_text.ilike(pattern)
+    ).subquery()
+    by_transcript = db.query(models.Meeting).filter(
+        models.Meeting.user_id == current_user.id,
+        models.Meeting.id.in_(transcript_ids)
+    ).all()
+    seen = set()
+    results = []
+    for m in by_title + by_transcript:
+        if m.id not in seen:
+            seen.add(m.id)
+            results.append(m)
+    results.sort(key=lambda m: m.created_at, reverse=True)
     return results
 
 def markdown_to_reportlab(text, styles):

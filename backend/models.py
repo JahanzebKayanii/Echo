@@ -30,6 +30,8 @@ class Meeting(Base):
     meeting_date = Column(Date, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     action_items = Column(Text, nullable=True)
+    tags = Column(String, nullable=True)
+    language = Column(String, default='en', server_default='en')
 
 class Transcript(Base):
     __tablename__ = "transcripts"

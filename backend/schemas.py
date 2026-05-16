@@ -26,6 +26,10 @@ class MeetingUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     meeting_date: Optional[DateType] = None
+    tags: Optional[str] = None
+
+class TranscribeRequest(BaseModel):
+    language: str = 'en'
 
 class MeetingNotesUpdate(BaseModel):
     notes: str
@@ -43,6 +47,8 @@ class MeetingResponse(BaseModel):
     duration_seconds: Optional[float] = None
     user_id: Optional[int] = None
     action_items: Optional[str] = None
+    tags: Optional[str] = None
+    language: Optional[str] = None
 
     class Config:
         from_attributes = True

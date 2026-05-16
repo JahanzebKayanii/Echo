@@ -27,6 +27,8 @@ function App() {
   const [loadingMeetings, setLoadingMeetings] = useState(true)
   const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState(null)
+  const [activeTag, setActiveTag] = useState(null)
   const [stats, setStats] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
@@ -38,6 +40,16 @@ function App() {
       fetchStats()
     }
   }, [loggedIn])
+
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults(null); return }
+    const timer = setTimeout(async () => {
+      const res = await apiFetch(`/meetings/search/query?q=${encodeURIComponent(searchQuery)}`)
+      const data = await res.json()
+      setSearchResults(Array.isArray(data) ? data : [])
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   async function fetchMeetings() {
     setLoadingMeetings(true)
@@ -146,12 +158,14 @@ function App() {
     )
   }
 
-  const displayedMeetings = searchQuery.trim()
-    ? meetings.filter(m =>
-        m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (m.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : meetings
+  const allTags = [...new Set(
+    meetings.flatMap(m => (m.tags || '').split(',').map(t => t.trim()).filter(Boolean))
+  )]
+
+  const baseMeetings = searchResults !== null ? searchResults : meetings
+  const displayedMeetings = activeTag
+    ? baseMeetings.filter(m => (m.tags || '').split(',').map(t => t.trim()).includes(activeTag))
+    : baseMeetings
 
   if (selectedMeeting) {
     return (
@@ -255,11 +269,24 @@ function App() {
             <input
               className="search-input"
               type="text"
-              placeholder="Search meetings..."
+              placeholder="Search titles, descriptions, transcripts..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => { setSearchQuery(e.target.value); setActiveTag(null) }}
             />
           </div>
+          {allTags.length > 0 && (
+            <div className="tag-filter-row">
+              {allTags.map(tag => (
+                <button
+                  key={tag}
+                  className={`tag-filter-chip ${activeTag === tag ? 'active' : ''}`}
+                  onClick={() => { setActiveTag(activeTag === tag ? null : tag); setSearchQuery('') }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
 
           {loadingMeetings ? (
             <div className="skeleton-list">
@@ -280,6 +307,13 @@ function App() {
                   <div className="meeting-info">
                     <h3>{m.title}</h3>
                     {m.description && <p>{m.description}</p>}
+                    {m.tags && (
+                      <div className="card-tags">
+                        {m.tags.split(',').map(t => t.trim()).filter(Boolean).map(tag => (
+                          <span key={tag} className="tag-pill-small">{tag}</span>
+                        ))}
+                      </div>
+                    )}
                     <span className="meta">
                       {m.meeting_date
                         ? new Date(m.meeting_date + 'T00:00:00').toLocaleDateString()
