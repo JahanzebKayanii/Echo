@@ -981,6 +981,10 @@ ul {
   opacity: 1 !important;
 }
 
+.auth-form .password-toggle svg {
+  display: block;
+}
+
 .auth-form button {
   background: linear-gradient(135deg, #7c3aed, #6d28d9);
   color: white;
