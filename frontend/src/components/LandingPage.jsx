@@ -1,4 +1,4 @@
-export default function LandingPage({ onGetStarted, onSignIn }) {
+export default function LandingPage({ onGetStarted, onSignIn, onLegal }) {
   return (
     <div className="landing">
 
@@ -107,6 +107,10 @@ export default function LandingPage({ onGetStarted, onSignIn }) {
       <footer className="landing-footer">
         <span className="landing-footer-logo">Echo</span>
         <span className="landing-footer-copy">© {new Date().getFullYear()} Echo. All rights reserved.</span>
+        <div className="landing-footer-links">
+          <button className="footer-link" onClick={() => onLegal('tos')}>Terms of Service</button>
+          <button className="footer-link" onClick={() => onLegal('privacy')}>Privacy Policy</button>
+        </div>
       </footer>
     </div>
   )

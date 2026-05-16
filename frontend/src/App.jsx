@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import MeetingDetail from './components/MeetingDetail'
 import LoginPage from './components/LoginPage'
 import LandingPage from './components/LandingPage'
+import LegalPage from './components/LegalPage'
 import { useToast, ToastContainer } from './components/Toast'
 import { apiFetch, getToken, clearToken } from './api'
 import './App.css'
@@ -17,6 +18,7 @@ function formatDuration(seconds) {
 function App() {
   const [loggedIn, setLoggedIn] = useState(!!getToken())
   const [showAuth, setShowAuth] = useState(false)
+  const [legalPage, setLegalPage] = useState(null)
   const [meetings, setMeetings] = useState([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -108,16 +110,27 @@ function App() {
     setStats(null)
   }
 
+  if (legalPage) {
+    return <LegalPage type={legalPage} onBack={() => setLegalPage(null)} />
+  }
+
   if (!loggedIn) {
     if (!showAuth) {
       return (
         <LandingPage
           onGetStarted={() => setShowAuth(true)}
           onSignIn={() => setShowAuth(true)}
+          onLegal={setLegalPage}
         />
       )
     }
-    return <LoginPage onLogin={() => setLoggedIn(true)} onBack={() => setShowAuth(false)} />
+    return (
+      <LoginPage
+        onLogin={() => setLoggedIn(true)}
+        onBack={() => setShowAuth(false)}
+        onLegal={setLegalPage}
+      />
+    )
   }
 
   const displayedMeetings = searchQuery.trim()

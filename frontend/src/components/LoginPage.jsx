@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { API, setToken } from '../api'
 
-export default function LoginPage({ onLogin, onBack }) {
+export default function LoginPage({ onLogin, onBack, onLegal }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -218,6 +218,14 @@ export default function LoginPage({ onLogin, onBack }) {
               <p className="auth-hint">You'll receive a verification email after registering.</p>
             )}
           </>
+        )}
+
+        {onLegal && (
+          <div className="auth-legal-links">
+            <button className="footer-link" onClick={() => onLegal('tos')}>Terms of Service</button>
+            <span className="auth-legal-sep">·</span>
+            <button className="footer-link" onClick={() => onLegal('privacy')}>Privacy Policy</button>
+          </div>
         )}
       </div>
     </div>
