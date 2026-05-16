@@ -99,7 +99,7 @@ function PrivacyPolicy() {
       </ul>
 
       <h2>4. Data Retention</h2>
-      <p>Your data is retained for as long as your account exists. You can delete individual meetings at any time. To delete your account and all associated data, contact us at <a href="mailto:jahanzeb2005@gmail.com">jahanzeb2005@gmail.com</a>.</p>
+      <p>Your data is retained for as long as your account exists. You can delete individual meetings at any time from within the app. You can also permanently delete your entire account and all associated data from the account settings in the app.</p>
 
       <h2>5. Security</h2>
       <p>Passwords are hashed using bcrypt and never stored in plain text. All connections use HTTPS. Authentication uses short-lived JWT tokens.</p>

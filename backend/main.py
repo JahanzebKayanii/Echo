@@ -159,6 +159,18 @@ def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db)
     db.refresh(db_meeting)
     return db_meeting
 
+@app.delete("/auth/account")
+def delete_account(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting_ids = [m.id for m in db.query(models.Meeting.id).filter(models.Meeting.user_id == current_user.id)]
+    if meeting_ids:
+        db.query(models.ChatMessage).filter(models.ChatMessage.meeting_id.in_(meeting_ids)).delete(synchronize_session=False)
+        db.query(models.Transcript).filter(models.Transcript.meeting_id.in_(meeting_ids)).delete(synchronize_session=False)
+        db.query(models.Meeting).filter(models.Meeting.user_id == current_user.id).delete(synchronize_session=False)
+        db.flush()
+    db.delete(current_user)
+    db.commit()
+    return {"message": "Account deleted"}
+
 @app.get("/meetings", response_model=List[schemas.MeetingResponse])
 def list_meetings(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     return db.query(models.Meeting).filter(models.Meeting.user_id == current_user.id).order_by(models.Meeting.created_at.desc()).all()

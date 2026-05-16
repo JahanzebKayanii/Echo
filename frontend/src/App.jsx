@@ -29,6 +29,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [stats, setStats] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
   const { toasts, showToast } = useToast()
 
   useEffect(() => {
@@ -108,6 +109,18 @@ function App() {
     setMeetings([])
     setSelectedMeeting(null)
     setStats(null)
+  }
+
+  async function handleDeleteAccount() {
+    const res = await apiFetch('/auth/account', { method: 'DELETE' })
+    if (res.ok) {
+      clearToken()
+      setLoggedIn(false)
+      setShowAuth(false)
+    } else {
+      showToast('Could not delete account. Try again.', 'error')
+      setConfirmDeleteAccount(false)
+    }
   }
 
   if (legalPage) {
@@ -300,6 +313,23 @@ function App() {
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+
+        <section className="danger-zone">
+          <h2>Danger Zone</h2>
+          {confirmDeleteAccount ? (
+            <div className="danger-confirm">
+              <p>This will permanently delete your account and all your meetings, transcripts, and data. This cannot be undone.</p>
+              <div className="danger-confirm-actions">
+                <button className="danger-confirm-btn" onClick={handleDeleteAccount}>Yes, delete my account</button>
+                <button className="danger-cancel-btn" onClick={() => setConfirmDeleteAccount(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button className="danger-btn" onClick={() => setConfirmDeleteAccount(true)}>
+              Delete Account
+            </button>
           )}
         </section>
       </main>
