@@ -84,6 +84,10 @@ def send_reset_email(to_email: str, token: str):
 def health_check():
     return {"status": "ok", "app": "Echo"}
 
+@app.get("/auth/me")
+def get_me(current_user: models.User = Depends(get_current_user)):
+    return {"email": current_user.email, "is_pro": current_user.is_pro}
+
 @app.post("/auth/register", response_model=schemas.UserResponse)
 def register(body: schemas.UserCreate, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.email == body.email).first():

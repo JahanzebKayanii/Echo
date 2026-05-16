@@ -3,6 +3,7 @@ import MeetingDetail from './components/MeetingDetail'
 import LoginPage from './components/LoginPage'
 import LandingPage from './components/LandingPage'
 import LegalPage from './components/LegalPage'
+import SettingsPage from './components/SettingsPage'
 import { useToast, ToastContainer } from './components/Toast'
 import { apiFetch, getToken, clearToken } from './api'
 import './App.css'
@@ -18,6 +19,8 @@ function formatDuration(seconds) {
 function App() {
   const [loggedIn, setLoggedIn] = useState(!!getToken())
   const [showAuth, setShowAuth] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   const [legalPage, setLegalPage] = useState(null)
   const [meetings, setMeetings] = useState([])
   const [title, setTitle] = useState('')
@@ -38,6 +41,7 @@ function App() {
     if (loggedIn) {
       fetchMeetings()
       fetchStats()
+      apiFetch('/auth/me').then(r => r.json()).then(d => setUserEmail(d.email || ''))
     }
   }, [loggedIn])
 
@@ -121,6 +125,8 @@ function App() {
     setMeetings([])
     setSelectedMeeting(null)
     setStats(null)
+    setShowSettings(false)
+    setUserEmail('')
   }
 
   async function handleDeleteAccount() {
@@ -129,9 +135,9 @@ function App() {
       clearToken()
       setLoggedIn(false)
       setShowAuth(false)
+      setShowSettings(false)
     } else {
       showToast('Could not delete account. Try again.', 'error')
-      setConfirmDeleteAccount(false)
     }
   }
 
@@ -167,6 +173,30 @@ function App() {
     ? baseMeetings.filter(m => (m.tags || '').split(',').map(t => t.trim()).includes(activeTag))
     : baseMeetings
 
+  if (showSettings) {
+    return (
+      <div className="app">
+        <ToastContainer toasts={toasts} />
+        <header className="app-header">
+          <h1>Echo</h1>
+          <p>AI Conversation Intelligence</p>
+          <button className="user-avatar-btn" onClick={() => setShowSettings(false)} title="Back">
+            {userEmail ? userEmail[0].toUpperCase() : '?'}
+          </button>
+        </header>
+        <main className="app-main">
+          <SettingsPage
+            onBack={() => setShowSettings(false)}
+            onLogout={handleLogout}
+            onDeleteAccount={handleDeleteAccount}
+            stats={stats}
+            userEmail={userEmail}
+          />
+        </main>
+      </div>
+    )
+  }
+
   if (selectedMeeting) {
     return (
       <div className="app">
@@ -174,7 +204,9 @@ function App() {
         <header className="app-header">
           <h1>Echo</h1>
           <p>AI Conversation Intelligence</p>
-          <button className="logout-btn" onClick={handleLogout}>Sign Out</button>
+          <button className="user-avatar-btn" onClick={() => setShowSettings(true)} title="Settings">
+            {userEmail ? userEmail[0].toUpperCase() : '?'}
+          </button>
         </header>
         <main className="app-main">
           <MeetingDetail
@@ -194,7 +226,9 @@ function App() {
       <header className="app-header">
         <h1>Echo</h1>
         <p>AI Conversation Intelligence</p>
-        <button className="logout-btn" onClick={handleLogout}>Sign Out</button>
+        <button className="user-avatar-btn" onClick={() => setShowSettings(true)} title="Settings">
+          {userEmail ? userEmail[0].toUpperCase() : '?'}
+        </button>
       </header>
 
       <main className="app-main">
@@ -350,22 +384,6 @@ function App() {
           )}
         </section>
 
-        <section className="danger-zone">
-          <h2>Danger Zone</h2>
-          {confirmDeleteAccount ? (
-            <div className="danger-confirm">
-              <p>This will permanently delete your account and all your meetings, transcripts, and data. This cannot be undone.</p>
-              <div className="danger-confirm-actions">
-                <button className="danger-confirm-btn" onClick={handleDeleteAccount}>Yes, delete my account</button>
-                <button className="danger-cancel-btn" onClick={() => setConfirmDeleteAccount(false)}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button className="danger-btn" onClick={() => setConfirmDeleteAccount(true)}>
-              Delete Account
-            </button>
-          )}
-        </section>
       </main>
     </div>
   )
