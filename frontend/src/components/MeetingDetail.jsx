@@ -79,6 +79,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
   const [language, setLanguage] = useState(meeting.language || 'en')
   const [tagInput, setTagInput] = useState('')
   const [identifying, setIdentifying] = useState(false)
+  const [loadingTranscripts, setLoadingTranscripts] = useState(!!meeting.audio_path)
   const pollRef = useRef(null)
 
   useEffect(() => {
@@ -116,6 +117,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
     const res = await apiFetch(`/meetings/${meeting.id}/transcripts`)
     const data = await res.json()
     setTranscripts(data)
+    setLoadingTranscripts(false)
     return data
   }
 
@@ -376,8 +378,17 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
         </div>
       )}
 
-      {/* Transcribe — shown after upload, before transcript exists */}
-      {uploaded && !hasTranscript && currentMeeting.status !== 'completed' && (
+      {/* Brief loading state while transcripts are being fetched */}
+      {uploaded && loadingTranscripts && (
+        <div className="detail-section">
+          <div className="section-body">
+            <div className="transcribing-status"><span className="spinner" /></div>
+          </div>
+        </div>
+      )}
+
+      {/* Transcribe — shown after upload, once loading is done, if no transcript yet */}
+      {uploaded && !loadingTranscripts && !hasTranscript && (
         <div className="detail-section">
           <SectionHeader title="Transcript" isOpen onToggle={() => {}} />
           <div className="section-body">
