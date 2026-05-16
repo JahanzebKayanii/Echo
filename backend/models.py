@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Date, Boolean
 from sqlalchemy.sql import func
 from database import Base
 
@@ -9,6 +9,10 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_verified = Column(Boolean, default=False, nullable=False, server_default='false')
+    verification_token = Column(String, nullable=True)
+    reset_token = Column(String, nullable=True)
+    reset_token_expires = Column(DateTime(timezone=True), nullable=True)
 
 class Meeting(Base):
     __tablename__ = "meetings"
@@ -22,6 +26,8 @@ class Meeting(Base):
     summary = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    meeting_date = Column(Date, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
 
 class Transcript(Base):
     __tablename__ = "transcripts"

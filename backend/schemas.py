@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date as DateType
 from typing import Optional
 
 class UserCreate(BaseModel):
@@ -20,6 +20,12 @@ class Token(BaseModel):
 class MeetingCreate(BaseModel):
     title: str
     description: Optional[str] = None
+    meeting_date: Optional[DateType] = None
+
+class MeetingUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    meeting_date: Optional[DateType] = None
 
 class MeetingNotesUpdate(BaseModel):
     notes: str
@@ -33,6 +39,9 @@ class MeetingResponse(BaseModel):
     notes: Optional[str]
     summary: Optional[str]
     created_at: datetime
+    meeting_date: Optional[DateType] = None
+    duration_seconds: Optional[float] = None
+    user_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -56,6 +65,13 @@ class TranscriptResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 class ChatRequest(BaseModel):
     message: str

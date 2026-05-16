@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import RecordButton from './RecordButton'
 import TranscriptLine from './TranscriptLine'
 import ChatPanel from './ChatPanel'
-import { apiFetch, API, getToken } from '../api'
+import { apiFetch } from '../api'
 
 const SPEAKER_COLORS = ['#a78bfa', '#34d399', '#f472b6', '#60a5fa', '#fb923c']
 
@@ -13,7 +13,13 @@ function colorForSpeaker(speaker) {
   return SPEAKER_COLORS[index]
 }
 
-export default function MeetingDetail({ meeting, onBack, onUpdate }) {
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = () => {} }) {
   const [uploading, setUploading] = useState(false)
   const [uploaded, setUploaded] = useState(!!meeting.audio_path)
   const [transcribing, setTranscribing] = useState(false)
@@ -21,12 +27,31 @@ export default function MeetingDetail({ meeting, onBack, onUpdate }) {
   const [currentMeeting, setCurrentMeeting] = useState(meeting)
   const [notes, setNotes] = useState(meeting.notes || '')
   const [summarizing, setSummarizing] = useState(false)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(meeting.title)
   const pollRef = useRef(null)
 
   useEffect(() => {
     if (meeting.audio_path) fetchTranscripts()
+    if (meeting.status === 'processing') {
+      setTranscribing(true)
+      pollRef.current = setInterval(async () => {
+        const m = await fetchMeeting()
+        if (m.status === 'completed' || m.status === 'error') {
+          clearInterval(pollRef.current)
+          setTranscribing(false)
+          await fetchTranscripts()
+        }
+      }, 3000)
+    }
     return () => clearInterval(pollRef.current)
   }, [])
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape' && !editingTitle) onBack() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [editingTitle, onBack])
 
   async function fetchTranscripts() {
     const res = await apiFetch(`/meetings/${meeting.id}/transcripts`)
@@ -93,6 +118,30 @@ export default function MeetingDetail({ meeting, onBack, onUpdate }) {
     setCurrentMeeting(updated)
     onUpdate(updated)
     setSummarizing(false)
+    showToast('Summary generated')
+  }
+
+  async function saveTitle() {
+    if (!titleDraft.trim()) { setEditingTitle(false); return }
+    if (titleDraft === currentMeeting.title) { setEditingTitle(false); return }
+    const res = await apiFetch(`/meetings/${meeting.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: titleDraft }),
+    })
+    const updated = await res.json()
+    setCurrentMeeting(updated)
+    onUpdate(updated)
+    setEditingTitle(false)
+    showToast('Meeting renamed')
+  }
+
+  async function copyTranscript() {
+    const text = transcripts
+      .map(t => `${t.speaker_label || t.speaker} [${formatTime(t.start_time)}]: ${t.edited_text || t.text}`)
+      .join('\n')
+    await navigator.clipboard.writeText(text)
+    showToast('Transcript copied to clipboard')
   }
 
   async function downloadExport(format) {
@@ -104,6 +153,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate }) {
     a.download = `${currentMeeting.title}.${format === 'pdf' ? 'pdf' : 'xlsx'}`
     a.click()
     URL.revokeObjectURL(url)
+    showToast(`${format.toUpperCase()} downloaded`)
   }
 
   async function saveNotes() {
@@ -114,18 +164,51 @@ export default function MeetingDetail({ meeting, onBack, onUpdate }) {
     }).then(r => r.json())
     setCurrentMeeting(updated)
     onUpdate(updated)
+    showToast('Notes saved')
   }
 
   return (
     <div className="detail-view">
-      <button className="back-btn" onClick={onBack}>← Back</button>
+      <button className="back-btn" onClick={onBack}>
+        ← Back <span className="esc-hint">esc</span>
+      </button>
 
       <div className="detail-header">
-        <h2>{currentMeeting.title}</h2>
+        {editingTitle ? (
+          <input
+            className="title-edit-input"
+            value={titleDraft}
+            onChange={e => setTitleDraft(e.target.value)}
+            onBlur={saveTitle}
+            onKeyDown={e => {
+              if (e.key === 'Enter') saveTitle()
+              if (e.key === 'Escape') setEditingTitle(false)
+            }}
+            autoFocus
+          />
+        ) : (
+          <h2
+            className="detail-title"
+            onClick={() => setEditingTitle(true)}
+            title="Click to rename"
+          >
+            {currentMeeting.title}
+            <span className="edit-icon">✎</span>
+          </h2>
+        )}
         {currentMeeting.description && <p className="detail-desc">{currentMeeting.description}</p>}
-        <span className={`status-badge status-${currentMeeting.status}`}>
-          {currentMeeting.status}
-        </span>
+        <div className="detail-meta">
+          {currentMeeting.meeting_date && (
+            <span className="meta-date">
+              {new Date(currentMeeting.meeting_date + 'T00:00:00').toLocaleDateString(undefined, {
+                year: 'numeric', month: 'long', day: 'numeric'
+              })}
+            </span>
+          )}
+          <span className={`status-badge status-${currentMeeting.status}`}>
+            {currentMeeting.status}
+          </span>
+        </div>
       </div>
 
       <div className="audio-section">
@@ -168,7 +251,10 @@ export default function MeetingDetail({ meeting, onBack, onUpdate }) {
 
       {transcripts.length > 0 && (
         <div className="transcript-section">
-          <h3>Transcript</h3>
+          <div className="section-header-row">
+            <h3>Transcript</h3>
+            <button className="copy-btn" onClick={copyTranscript}>Copy all</button>
+          </div>
           <p className="edit-instructions">Click any speaker name to rename · Click any line to edit text</p>
           <ul className="transcript-list">
             {transcripts.map(t => (
@@ -189,8 +275,8 @@ export default function MeetingDetail({ meeting, onBack, onUpdate }) {
           <h3>AI Summary</h3>
           {currentMeeting.summary ? (
             <div className="summary-text">
-            <ReactMarkdown>{currentMeeting.summary}</ReactMarkdown>
-          </div>
+              <ReactMarkdown>{currentMeeting.summary}</ReactMarkdown>
+            </div>
           ) : (
             <button className="summarize-btn" onClick={generateSummary} disabled={summarizing}>
               {summarizing ? <><span className="spinner" /> Generating summary...</> : 'Generate Summary'}

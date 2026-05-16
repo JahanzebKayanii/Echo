@@ -1,18 +1,33 @@
 import { useState, useEffect } from 'react'
 import MeetingDetail from './components/MeetingDetail'
 import LoginPage from './components/LoginPage'
+import LandingPage from './components/LandingPage'
+import { useToast, ToastContainer } from './components/Toast'
 import { apiFetch, getToken, clearToken } from './api'
 import './App.css'
 
+function formatDuration(seconds) {
+  if (!seconds) return null
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
 function App() {
   const [loggedIn, setLoggedIn] = useState(!!getToken())
+  const [showAuth, setShowAuth] = useState(false)
   const [meetings, setMeetings] = useState([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [meetingDate, setMeetingDate] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingMeetings, setLoadingMeetings] = useState(true)
   const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [stats, setStats] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const { toasts, showToast } = useToast()
 
   useEffect(() => {
     if (loggedIn) {
@@ -22,9 +37,11 @@ function App() {
   }, [loggedIn])
 
   async function fetchMeetings() {
+    setLoadingMeetings(true)
     const res = await apiFetch('/meetings')
     const data = await res.json()
     setMeetings(data)
+    setLoadingMeetings(false)
   }
 
   async function fetchStats() {
@@ -40,20 +57,36 @@ function App() {
     await apiFetch('/meetings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description }),
+      body: JSON.stringify({ title, description, meeting_date: meetingDate || null }),
     })
     setTitle('')
     setDescription('')
+    setMeetingDate('')
     setLoading(false)
     fetchMeetings()
     fetchStats()
+    showToast('Meeting created')
   }
 
   async function deleteMeeting(e, id) {
     e.stopPropagation()
-    await apiFetch(`/meetings/${id}`, { method: 'DELETE' })
-    fetchMeetings()
-    fetchStats()
+    try {
+      const res = await apiFetch(`/meetings/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        showToast(err.detail || `Delete failed (${res.status})`, 'error')
+        setConfirmDelete(null)
+        return
+      }
+      setConfirmDelete(null)
+      if (selectedMeeting?.id === id) setSelectedMeeting(null)
+      await fetchMeetings()
+      fetchStats()
+      showToast('Meeting deleted', 'error')
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error')
+      setConfirmDelete(null)
+    }
   }
 
   function handleMeetingUpdate(updated) {
@@ -70,7 +103,15 @@ function App() {
   }
 
   if (!loggedIn) {
-    return <LoginPage onLogin={() => setLoggedIn(true)} />
+    if (!showAuth) {
+      return (
+        <LandingPage
+          onGetStarted={() => setShowAuth(true)}
+          onSignIn={() => setShowAuth(true)}
+        />
+      )
+    }
+    return <LoginPage onLogin={() => setLoggedIn(true)} onBack={() => setShowAuth(false)} />
   }
 
   const displayedMeetings = searchQuery.trim()
@@ -83,6 +124,7 @@ function App() {
   if (selectedMeeting) {
     return (
       <div className="app">
+        <ToastContainer toasts={toasts} />
         <header className="app-header">
           <h1>Echo</h1>
           <p>AI Conversation Intelligence</p>
@@ -93,6 +135,7 @@ function App() {
             meeting={selectedMeeting}
             onBack={() => { setSelectedMeeting(null); fetchStats() }}
             onUpdate={handleMeetingUpdate}
+            showToast={showToast}
           />
         </main>
       </div>
@@ -101,6 +144,7 @@ function App() {
 
   return (
     <div className="app">
+      <ToastContainer toasts={toasts} />
       <header className="app-header">
         <h1>Echo</h1>
         <p>AI Conversation Intelligence</p>
@@ -135,8 +179,17 @@ function App() {
               placeholder="Description (optional)"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              rows={3}
+              rows={2}
             />
+            <div className="date-row">
+              <label className="date-label">Meeting date</label>
+              <input
+                type="date"
+                value={meetingDate}
+                onChange={e => setMeetingDate(e.target.value)}
+                className="date-input"
+              />
+            </div>
             <button type="submit" disabled={loading}>
               {loading ? 'Creating...' : 'Create Meeting'}
             </button>
@@ -154,24 +207,56 @@ function App() {
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
-          {displayedMeetings.length === 0 ? (
+
+          {loadingMeetings ? (
+            <div className="skeleton-list">
+              {[1, 2, 3].map(i => <div key={i} className="skeleton-card" />)}
+            </div>
+          ) : displayedMeetings.length === 0 ? (
             <p className="empty">
               {searchQuery ? 'No meetings match your search.' : 'No meetings yet. Create one above.'}
             </p>
           ) : (
             <ul>
               {displayedMeetings.map(m => (
-                <li key={m.id} className="meeting-card" onClick={() => setSelectedMeeting(m)}>
+                <li
+                  key={m.id}
+                  className="meeting-card"
+                  onClick={() => { setConfirmDelete(null); setSelectedMeeting(m) }}
+                >
                   <div className="meeting-info">
                     <h3>{m.title}</h3>
                     {m.description && <p>{m.description}</p>}
                     <span className="meta">
-                      {new Date(m.created_at).toLocaleString()} · <span className={`status-badge status-${m.status}`}>{m.status}</span>
+                      {m.meeting_date
+                        ? new Date(m.meeting_date + 'T00:00:00').toLocaleDateString()
+                        : new Date(m.created_at).toLocaleString()}
+                      {formatDuration(m.duration_seconds) && (
+                        <span className="duration-badge">{formatDuration(m.duration_seconds)}</span>
+                      )}
+                      {' · '}
+                      <span className={`status-badge status-${m.status}`}>{m.status}</span>
                     </span>
                   </div>
-                  <button className="delete-btn" onClick={(e) => deleteMeeting(e, m.id)}>
-                    Delete
-                  </button>
+                  <div className="card-actions">
+                    {confirmDelete === m.id ? (
+                      <>
+                        <button
+                          className="delete-confirm-btn"
+                          onClick={(e) => { e.stopPropagation(); deleteMeeting(e, m.id) }}
+                        >Yes, delete</button>
+                        <button
+                          className="delete-cancel-btn"
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(null) }}
+                        >Cancel</button>
+                      </>
+                    ) : (
+                      <button
+                        className="delete-btn"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(m.id) }}
+                      >Delete</button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

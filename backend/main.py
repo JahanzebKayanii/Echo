@@ -6,13 +6,16 @@ from typing import List
 import models
 import schemas
 from database import engine, get_db, SessionLocal
-from auth import hash_password, verify_password, create_access_token, get_current_user
+from datetime import datetime, timedelta, timezone
+from auth import hash_password, verify_password, create_access_token, get_current_user, generate_token
+import resend
 from deepgram import DeepgramClient, PrerecordedOptions
 import anthropic
 import os
 import time
 import io
 import re
+import httpx
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -43,6 +46,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+resend.api_key = os.getenv("RESEND_API_KEY", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+def send_verification_email(to_email: str, token: str):
+    link = f"{FRONTEND_URL}?verify={token}"
+    resend.Emails.send({
+        "from": "Echo <onboarding@resend.dev>",
+        "to": [to_email],
+        "subject": "Verify your Echo account",
+        "html": f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+            <h2 style="color:#a78bfa;margin-bottom:8px;">Echo</h2>
+            <p style="color:#334155;">Click below to verify your email address.</p>
+            <a href="{link}" style="display:inline-block;margin:24px 0;background:#7c3aed;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Verify Email</a>
+            <p style="color:#94a3b8;font-size:13px;">If you didn't create an Echo account, ignore this email.</p>
+        </div>"""
+    })
+
+def send_reset_email(to_email: str, token: str):
+    link = f"{FRONTEND_URL}?reset={token}"
+    resend.Emails.send({
+        "from": "Echo <onboarding@resend.dev>",
+        "to": [to_email],
+        "subject": "Reset your Echo password",
+        "html": f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+            <h2 style="color:#a78bfa;margin-bottom:8px;">Echo</h2>
+            <p style="color:#334155;">Click below to reset your password. This link expires in 30 minutes.</p>
+            <a href="{link}" style="display:inline-block;margin:24px 0;background:#7c3aed;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a>
+            <p style="color:#94a3b8;font-size:13px;">If you didn't request this, ignore this email.</p>
+        </div>"""
+    })
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": "Echo"}
@@ -51,10 +87,15 @@ def health_check():
 def register(body: schemas.UserCreate, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    user = models.User(email=body.email, hashed_password=hash_password(body.password))
+    token = generate_token()
+    user = models.User(email=body.email, hashed_password=hash_password(body.password), verification_token=token, is_verified=False)
     db.add(user)
     db.commit()
     db.refresh(user)
+    try:
+        send_verification_email(body.email, token)
+    except Exception as e:
+        print(f"Verification email error: {e}")
     return user
 
 @app.post("/auth/login", response_model=schemas.Token)
@@ -62,7 +103,46 @@ def login(body: schemas.UserCreate, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == body.email).first()
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_verified:
+        raise HTTPException(status_code=403, detail="Please verify your email before signing in. Check your inbox.")
     return {"access_token": create_access_token(user.email), "token_type": "bearer"}
+
+@app.get("/auth/verify")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.verification_token == token).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link.")
+    user.is_verified = True
+    user.verification_token = None
+    db.commit()
+    return {"message": "Email verified successfully"}
+
+@app.post("/auth/forgot-password")
+def forgot_password(body: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == body.email).first()
+    if user:
+        token = generate_token()
+        user.reset_token = token
+        user.reset_token_expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+        db.commit()
+        try:
+            send_reset_email(body.email, token)
+        except Exception as e:
+            print(f"Reset email error: {e}")
+    return {"message": "If that email exists, a reset link has been sent."}
+
+@app.post("/auth/reset-password")
+def reset_password(body: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.reset_token == body.token).first()
+    if not user or not user.reset_token_expires:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+    if datetime.now(timezone.utc) > user.reset_token_expires:
+        raise HTTPException(status_code=400, detail="Reset link has expired. Request a new one.")
+    user.hashed_password = hash_password(body.new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    db.commit()
+    return {"message": "Password reset successfully. You can now sign in."}
 
 @app.post("/meetings", response_model=schemas.MeetingResponse)
 def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -88,9 +168,18 @@ def delete_meeting(meeting_id: int, db: Session = Depends(get_db), current_user:
     meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    db.delete(meeting)
-    db.commit()
-    return {"message": "Meeting deleted"}
+    try:
+        db.query(models.ChatMessage).filter(models.ChatMessage.meeting_id == meeting_id).delete(synchronize_session=False)
+        db.query(models.Transcript).filter(models.Transcript.meeting_id == meeting_id).delete(synchronize_session=False)
+        db.flush()
+        db.delete(meeting)
+        db.commit()
+        print(f"Deleted meeting {meeting_id} successfully")
+        return {"message": "Meeting deleted"}
+    except Exception as e:
+        db.rollback()
+        print(f"Delete error for meeting {meeting_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/meetings/{meeting_id}/audio", response_model=schemas.MeetingResponse)
 async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -131,6 +220,7 @@ def run_transcription(filepath: str, meeting_id: int):
         response = deepgram.listen.rest.v("1").transcribe_file(
             {"buffer": buffer_data},
             options,
+            timeout=httpx.Timeout(300.0, connect=10.0),
         )
 
         utterances = response.results.utterances or []
@@ -147,6 +237,8 @@ def run_transcription(filepath: str, meeting_id: int):
         meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
         if meeting:
             meeting.status = "completed"
+            if utterances:
+                meeting.duration_seconds = max(u.end for u in utterances)
         db.commit()
 
     except Exception as e:
@@ -188,6 +280,21 @@ def update_transcript(transcript_id: int, body: schemas.TranscriptUpdate, db: Se
     db.commit()
     db.refresh(transcript)
     return transcript
+
+@app.patch("/meetings/{meeting_id}", response_model=schemas.MeetingResponse)
+def update_meeting(meeting_id: int, body: schemas.MeetingUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id, models.Meeting.user_id == current_user.id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if body.title is not None:
+        meeting.title = body.title
+    if body.description is not None:
+        meeting.description = body.description
+    if body.meeting_date is not None:
+        meeting.meeting_date = body.meeting_date
+    db.commit()
+    db.refresh(meeting)
+    return meeting
 
 @app.patch("/meetings/{meeting_id}/notes", response_model=schemas.MeetingResponse)
 def update_notes(meeting_id: int, body: schemas.MeetingNotesUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
