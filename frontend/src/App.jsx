@@ -54,11 +54,17 @@ function App() {
     e.preventDefault()
     if (!title.trim()) return
     setLoading(true)
-    await apiFetch('/meetings', {
+    const res = await apiFetch('/meetings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description, meeting_date: meetingDate || null }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.detail || 'Could not create meeting.', 'error')
+      setLoading(false)
+      return
+    }
     setTitle('')
     setDescription('')
     setMeetingDate('')
@@ -155,18 +161,29 @@ function App() {
         {stats && (
           <div className="stats-bar">
             <div className="stat-item">
-              <span className="stat-value">{stats.total_meetings}</span>
-              <span className="stat-label">Meetings</span>
-            </div>
-            <div className="stat-item">
               <span className="stat-value">{stats.total_hours}h</span>
               <span className="stat-label">Audio Processed</span>
+            </div>
+            <div className="stat-item usage-item">
+              <div className="usage-header">
+                <span className="stat-label">Meetings Used</span>
+                <span className="usage-fraction">{stats.total_meetings} / {stats.meeting_limit}</span>
+              </div>
+              <div className="usage-bar-track">
+                <div
+                  className={`usage-bar-fill ${stats.total_meetings >= stats.meeting_limit ? 'usage-bar-full' : ''}`}
+                  style={{ width: `${Math.min((stats.total_meetings / stats.meeting_limit) * 100, 100)}%` }}
+                />
+              </div>
             </div>
           </div>
         )}
 
         <section className="create-section">
           <h2>New Meeting</h2>
+          {stats?.total_meetings >= stats?.meeting_limit && (
+            <p className="limit-warning">You've reached the free plan limit of {stats.meeting_limit} meetings. Delete a meeting to create a new one.</p>
+          )}
           <form onSubmit={createMeeting}>
             <input
               type="text"
@@ -190,7 +207,7 @@ function App() {
                 className="date-input"
               />
             </div>
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || stats?.total_meetings >= stats?.meeting_limit}>
               {loading ? 'Creating...' : 'Create Meeting'}
             </button>
           </form>

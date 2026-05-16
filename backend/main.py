@@ -144,8 +144,13 @@ def reset_password(body: schemas.ResetPasswordRequest, db: Session = Depends(get
     db.commit()
     return {"message": "Password reset successfully. You can now sign in."}
 
+FREE_MEETING_LIMIT = 5
+
 @app.post("/meetings", response_model=schemas.MeetingResponse)
 def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    count = db.query(models.Meeting).filter(models.Meeting.user_id == current_user.id).count()
+    if count >= FREE_MEETING_LIMIT:
+        raise HTTPException(status_code=403, detail=f"Free plan limit reached ({FREE_MEETING_LIMIT} meetings). Delete a meeting to make room.")
     db_meeting = models.Meeting(**meeting.model_dump(), user_id=current_user.id)
     db.add(db_meeting)
     db.commit()
@@ -399,7 +404,11 @@ def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends
     transcripts = db.query(models.Transcript).filter(models.Transcript.meeting_id.in_(meeting_ids)).all()
     total_seconds = sum((t.end_time - t.start_time) for t in transcripts)
     total_hours = round(total_seconds / 3600, 1)
-    return {"total_meetings": total_meetings, "total_hours": total_hours}
+    return {
+        "total_meetings": total_meetings,
+        "total_hours": total_hours,
+        "meeting_limit": FREE_MEETING_LIMIT,
+    }
 
 @app.get("/meetings/search/query", response_model=List[schemas.MeetingResponse])
 def search_meetings(q: str, db: Session = Depends(get_db)):
