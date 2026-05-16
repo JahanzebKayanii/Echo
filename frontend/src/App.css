@@ -977,8 +977,8 @@ ul {
 }
 
 .auth-form .password-toggle:hover {
-  transform: translateY(-50%);
-  opacity: 1;
+  transform: translateY(-50%) !important;
+  opacity: 1 !important;
 }
 
 .auth-form button {
