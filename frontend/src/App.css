@@ -1049,6 +1049,48 @@ ul {
 
 .auth-link-btn:hover { color: #a78bfa; }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
+  color: #2d3148;
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #252840;
+}
+
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #1e2130;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px;
+  color: #e2e8f0;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  font-family: inherit;
+}
+
+.google-btn:hover:not(:disabled) {
+  background: #252840;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.google-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .auth-back-btn {
   background: none;
   border: none;

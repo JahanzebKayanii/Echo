@@ -111,6 +111,39 @@ def register(body: schemas.UserCreate, db: Session = Depends(get_db)):
         print(f"Verification email error: {e}")
     return user
 
+@app.post("/auth/google", response_model=schemas.Token)
+async def google_auth(body: schemas.GoogleAuthRequest, db: Session = Depends(get_db)):
+    import secrets
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {body.token}"}
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    info = resp.json()
+    email = info.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="No email in Google account")
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        user = models.User(
+            email=email,
+            hashed_password=hash_password(secrets.token_hex(32)),
+            is_verified=True,
+            name=info.get("given_name") or info.get("name") or None,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif not user.is_verified:
+        user.is_verified = True
+        db.commit()
+
+    return {"access_token": create_access_token(user.email), "token_type": "bearer"}
+
 @app.post("/auth/login", response_model=schemas.Token)
 def login(body: schemas.UserCreate, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == body.email).first()
