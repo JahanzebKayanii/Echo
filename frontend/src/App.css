@@ -963,13 +963,17 @@ ul {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  background: none;
+  background: #13151f;
   border: none;
   color: #4c4f6b;
   cursor: pointer;
   padding: 4px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   transition: color 0.2s;
 }
 
