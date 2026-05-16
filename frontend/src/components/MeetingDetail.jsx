@@ -79,6 +79,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
   const [language, setLanguage] = useState(meeting.language || 'en')
   const [tagInput, setTagInput] = useState('')
   const [identifying, setIdentifying] = useState(false)
+  const [speakerRenames, setSpeakerRenames] = useState(null)
   const [loadingTranscripts, setLoadingTranscripts] = useState(!!meeting.audio_path)
   const pollRef = useRef(null)
 
@@ -290,6 +291,7 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
       const data = await res.json()
       await fetchTranscripts()
       if (data.count > 0) {
+        setSpeakerRenames(data.mappings.filter(m => m.old_name && m.new_name && m.old_name !== m.new_name))
         showToast(`Identified ${data.count} speaker${data.count > 1 ? 's' : ''}`)
       } else {
         showToast('No speaker names found in the transcript', 'error')
@@ -298,6 +300,20 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
       showToast('Could not identify speakers', 'error')
     }
     setIdentifying(false)
+  }
+
+  async function revertSpeakers() {
+    if (!speakerRenames) return
+    for (const { old_name, new_name } of speakerRenames) {
+      await apiFetch(`/meetings/${meeting.id}/rename-speaker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_name: new_name, new_name: old_name }),
+      })
+    }
+    await fetchTranscripts()
+    setSpeakerRenames(null)
+    showToast('Speaker names reverted')
   }
 
   const speakerColors = buildSpeakerColorMap(transcripts)
@@ -428,6 +444,9 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
               onToggle={() => toggleSection('transcript')}
               right={
                 <>
+                  {speakerRenames && speakerRenames.length > 0 && (
+                    <button className="revert-btn" onClick={e => { e.stopPropagation(); revertSpeakers() }}>Undo names</button>
+                  )}
                   <button className="identify-btn" onClick={e => { e.stopPropagation(); identifySpeakers() }} disabled={identifying}>
                     {identifying ? 'Identifying...' : 'Auto-identify'}
                   </button>
@@ -438,6 +457,9 @@ export default function MeetingDetail({ meeting, onBack, onUpdate, showToast = (
             {openSections.transcript && (
               <div className="section-body">
                 <p className="edit-instructions">Click any speaker name to rename · Click any line to edit text</p>
+                {speakerRenames && speakerRenames.length > 0 && (
+                  <p className="ai-identify-notice">AI-identified speakers — may not be 100% accurate. Click any name to correct.</p>
+                )}
                 <ul className="transcript-list">
                   {transcripts.map(t => (
                     <TranscriptLine

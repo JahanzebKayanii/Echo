@@ -375,20 +375,20 @@ def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_us
             "role": "user",
             "content": (
                 f"Transcript (speaker labels: {', '.join(unique_speakers)}):\n\n{transcript_text}\n\n"
-                "Identify each speaker's real name. Only include a speaker if you are highly certain — "
-                "meaning there is direct, unambiguous evidence in the transcript. "
+                "Identify each speaker's real name. Include a speaker when there is clear evidence — "
+                "direct evidence is best, but strong contextual evidence is also acceptable. "
                 "Valid evidence:\n"
                 "1. The speaker says their own name: 'Hi I'm David', 'I'm Sarah', 'My name is John'\n"
-                "2. Another speaker introduces them AND they immediately speak next: "
-                "'This is David' then the very next turn is David speaking\n"
-                "3. A speaker is addressed by name AND their response clearly confirms it "
-                "(e.g. they answer a question directed at them by name)\n\n"
-                "Do NOT guess or infer based on job roles, context, or weak clues. "
-                "Do NOT include a mapping if there is any reasonable doubt. "
-                "Only include real person names — not roles like 'Narrator' or 'Interviewer'.\n\n"
+                "2. Another speaker introduces them and they speak next: "
+                "'This is David' / 'Meet Sarah' / 'Joining us is John' — the next speaker is that person\n"
+                "3. A speaker is addressed by name and responds to that address\n"
+                "4. Strong contextual clues: e.g. someone is described as the HR manager, "
+                "and one speaker clearly plays that role throughout\n\n"
+                "Skip a speaker only if you have no reasonable basis at all. "
+                "Only use real person names — not roles like 'Narrator' or 'Interviewer'.\n\n"
                 f"Use EXACTLY these label strings in old_name: {', '.join(unique_speakers)}\n"
                 "Return ONLY a JSON array: [{\"old_name\": \"Speaker 0\", \"new_name\": \"David\"}, ...]\n"
-                "If no names can be confirmed with certainty, return []"
+                "If no names can be identified, return []"
             )
         }]
     )
