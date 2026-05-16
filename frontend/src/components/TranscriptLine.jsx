@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { apiFetch } from '../api'
 
 function formatTime(seconds) {
@@ -15,6 +15,9 @@ export default function TranscriptLine({ transcript, color, onRenameSpeaker, onT
   const [text, setText] = useState(displayText)
   const [editingSpeaker, setEditingSpeaker] = useState(false)
   const [speaker, setSpeaker] = useState(displaySpeaker)
+
+  useEffect(() => { setSpeaker(transcript.speaker_label || transcript.speaker) }, [transcript.speaker_label, transcript.speaker])
+  useEffect(() => { setText(transcript.edited_text || transcript.text) }, [transcript.edited_text, transcript.text])
 
   async function saveText() {
     setEditingText(false)
