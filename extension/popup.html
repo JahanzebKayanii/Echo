@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Echo</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="header">
+      <span class="logo">Echo</span>
+      <span class="tagline">Meeting Recorder</span>
+    </div>
+
+    <div id="view-notloggedin" class="view hidden">
+      <p class="hint">Sign in to Echo to start recording your meetings.</p>
+      <button id="btn-open-echo" class="btn-primary">Open Echo</button>
+    </div>
+
+    <div id="view-idle" class="view hidden">
+      <div class="status-row">
+        <span class="user-email" id="user-email"></span>
+      </div>
+      <div class="meeting-form">
+        <input id="meeting-title" type="text" placeholder="Meeting title (optional)" />
+      </div>
+      <button id="btn-record" class="btn-record">
+        <span class="record-icon"></span>
+        Start Recording
+      </button>
+      <p class="hint">Records mic + system audio from any meeting.</p>
+    </div>
+
+    <div id="view-recording" class="view hidden">
+      <div class="recording-indicator">
+        <span class="pulse-dot"></span>
+        <span class="rec-label">Recording</span>
+      </div>
+      <div class="timer" id="timer">0:00</div>
+      <p class="rec-hint">Recording your meeting…</p>
+      <button id="btn-stop" class="btn-stop">Stop & Upload</button>
+    </div>
+
+    <div id="view-uploading" class="view hidden">
+      <div class="spinner"></div>
+      <p class="uploading-text">Uploading to Echo…</p>
+    </div>
+
+    <div id="view-done" class="view hidden">
+      <div class="done-icon">✓</div>
+      <p class="done-text">Uploaded! Echo is transcribing your meeting.</p>
+      <button id="btn-view-meeting" class="btn-primary">View in Echo</button>
+      <button id="btn-record-another" class="btn-ghost">Record another</button>
+    </div>
+
+    <div id="view-error" class="view hidden">
+      <p class="error-text" id="error-msg">Something went wrong.</p>
+      <button id="btn-retry" class="btn-ghost">Try again</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
