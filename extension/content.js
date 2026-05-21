@@ -1,16 +1,22 @@
-// Runs on echo-silk-one.vercel.app — syncs the auth token to extension storage
 function syncToken() {
-  const token = localStorage.getItem('echo_token')
-  if (token) {
-    chrome.runtime.sendMessage({ type: 'SYNC_TOKEN', token })
+  try {
+    const token = localStorage.getItem('echo_token')
+    if (token) {
+      chrome.storage.local.set({ echo_token: token })
+    } else {
+      chrome.storage.local.remove('echo_token')
+    }
+  } catch {
+    clearInterval(interval)
   }
 }
 
 syncToken()
+const interval = setInterval(syncToken, 2000)
 
-// Watch for token changes (login/logout)
-window.addEventListener('storage', e => {
-  if (e.key === 'echo_token') {
-    chrome.runtime.sendMessage({ type: 'SYNC_TOKEN', token: e.newValue || '' })
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'GET_TOKEN') {
+    sendResponse({ token: localStorage.getItem('echo_token') || null })
   }
+  return true
 })

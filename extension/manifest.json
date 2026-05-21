@@ -3,10 +3,10 @@
   "name": "Echo – Meeting Recorder",
   "version": "1.0.0",
   "description": "Record any meeting and send it straight to Echo for transcription and AI analysis.",
-  "permissions": ["storage", "microphone", "tabs"],
+  "permissions": ["storage", "tabs", "offscreen"],
   "host_permissions": [
     "https://echo-silk-one.vercel.app/*",
-    "https://echo-api-hfq5.onrender.com/*"
+    "https://echo-backend-wom7.onrender.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Echo – Recording</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: system-ui, 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    .logo { font-size: 36px; font-weight: 800; color: #a78bfa; letter-spacing: -1px; }
+    .pulse-dot {
+      width: 16px; height: 16px;
+      background: #f87171; border-radius: 50%;
+      animation: pulse 1s infinite;
+      box-shadow: 0 0 12px rgba(248,113,113,0.5);
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .status { font-size: 15px; color: #64748b; }
+    .timer { font-size: 52px; font-weight: 800; color: #f1f5f9; font-variant-numeric: tabular-nums; letter-spacing: -2px; }
+    .error { color: #f87171; font-size: 14px; max-width: 360px; line-height: 1.6; text-align: center; }
+    #btn-stop {
+      background: #f87171; color: white; border: none; border-radius: 10px;
+      padding: 12px 32px; font-size: 15px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: background 0.2s; margin-top: 8px;
+    }
+    #btn-stop:hover { background: #ef4444; }
+    #btn-stop:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Echo</div>
+    <div class="pulse-dot" id="dot"></div>
+    <div class="status" id="status">Starting recording…</div>
+    <div class="timer" id="timer">0:00</div>
+    <button id="btn-stop">Stop & Upload</button>
+  </div>
+  <script src="recorder.js"></script>
+</body>
+</html>

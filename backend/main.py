@@ -334,10 +334,25 @@ async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Sessio
 def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False, language: str = 'en'):
     db = SessionLocal()
     try:
+        print(f"[transcribe] Starting for meeting {meeting_id}, file: {filepath}")
+
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Audio file not found: {filepath}")
+
+        file_size = os.path.getsize(filepath)
+        print(f"[transcribe] File size: {file_size} bytes")
+
+        if file_size < 1000:
+            raise ValueError(f"Audio file too small ({file_size} bytes) — recording may be empty")
+
         deepgram = DeepgramClient(os.getenv("DEEPGRAM_API_KEY"))
 
         with open(filepath, "rb") as f:
             buffer_data = f.read()
+
+        ext = filepath.rsplit(".", 1)[-1].lower()
+        mimetype = "audio/webm" if ext == "webm" else "audio/mpeg" if ext == "mp3" else "audio/wav" if ext == "wav" else "audio/webm"
+        print(f"[transcribe] Using mimetype: {mimetype}")
 
         options = PrerecordedOptions(
             model="nova-2",
@@ -348,10 +363,11 @@ def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False, lang
         )
 
         response = deepgram.listen.rest.v("1").transcribe_file(
-            {"buffer": buffer_data},
+            {"buffer": buffer_data, "mimetype": mimetype},
             options,
             timeout=httpx.Timeout(300.0, connect=10.0),
         )
+        print(f"[transcribe] Deepgram response received for meeting {meeting_id}")
 
         utterances = response.results.utterances or []
         for u in utterances:
