@@ -326,7 +326,7 @@ async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Sessio
         f.write(content)
 
     meeting.audio_path = filepath
-    meeting.status = "processing"
+    meeting.status = "pending"
     db.commit()
     db.refresh(meeting)
     return meeting
