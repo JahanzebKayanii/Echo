@@ -58,20 +58,6 @@ app.add_middleware(
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-def send_verification_email(to_email: str, token: str):
-    link = f"{FRONTEND_URL}?verify={token}"
-    resend.Emails.send({
-        "from": "Echo <onboarding@resend.dev>",
-        "to": [to_email],
-        "subject": "Verify your Echo account",
-        "html": f"""
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
-            <h2 style="color:#a78bfa;margin-bottom:8px;">Echo</h2>
-            <p style="color:#334155;">Click below to verify your email address.</p>
-            <a href="{link}" style="display:inline-block;margin:24px 0;background:#7c3aed;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Verify Email</a>
-            <p style="color:#94a3b8;font-size:13px;">If you didn't create an Echo account, ignore this email.</p>
-        </div>"""
-    })
 
 def send_reset_email(to_email: str, token: str):
     link = f"{FRONTEND_URL}?reset={token}"
@@ -100,15 +86,10 @@ def get_me(current_user: models.User = Depends(get_current_user)):
 def register(body: schemas.UserCreate, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    token = generate_token()
-    user = models.User(email=body.email, hashed_password=hash_password(body.password), verification_token=token, is_verified=False, name=body.name or None)
+    user = models.User(email=body.email, hashed_password=hash_password(body.password), is_verified=True, name=body.name or None)
     db.add(user)
     db.commit()
     db.refresh(user)
-    try:
-        send_verification_email(body.email, token)
-    except Exception as e:
-        print(f"Verification email error: {e}")
     return user
 
 @app.post("/auth/google", response_model=schemas.Token)
@@ -211,19 +192,7 @@ def login(body: schemas.UserCreate, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == body.email).first()
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if not user.is_verified:
-        raise HTTPException(status_code=403, detail="Please verify your email before signing in. Check your inbox.")
     return {"access_token": create_access_token(user.email), "token_type": "bearer"}
-
-@app.get("/auth/verify")
-def verify_email(token: str, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.verification_token == token).first()
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired verification link.")
-    user.is_verified = True
-    user.verification_token = None
-    db.commit()
-    return {"message": "Email verified successfully"}
 
 @app.post("/auth/forgot-password")
 def forgot_password(body: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):

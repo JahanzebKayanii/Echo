@@ -49,25 +49,8 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const verifyToken = params.get('verify')
     const resetTok = params.get('reset')
-
-    if (verifyToken) {
-      setMode('verifying')
-      fetch(`${API}/auth/verify?token=${verifyToken}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.message) {
-            setMode('verified')
-            setInfo(data.message)
-          } else {
-            setMode('verify-error')
-            setError(data.detail || 'Verification failed.')
-          }
-        })
-        .catch(() => { setMode('verify-error'); setError('Could not connect to server.') })
-      window.history.replaceState({}, '', '/')
-    } else if (resetTok) {
+    if (resetTok) {
       setResetToken(resetTok)
       setMode('reset')
       window.history.replaceState({}, '', '/')
@@ -120,15 +103,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
         return
       }
 
-      if (mode === 'register') {
-        setInfo('Account created! Check your email to verify before signing in.')
-        setMode('login')
-        setEmail('')
-        setName('')
-        setPassword('')
-        return
-      }
-
       setToken(data.access_token)
       onLogin()
     } catch {
@@ -141,8 +115,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
   const titles = {
     login: 'Sign In', register: 'Create Account',
     forgot: 'Reset Password', reset: 'New Password',
-    verifying: 'Verifying…', verified: 'Email Verified',
-    'verify-error': 'Verification Failed',
   }
 
   return (
@@ -156,28 +128,7 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
         <h1 className="auth-logo">Echo</h1>
         <p className="auth-tagline">AI Conversation Intelligence</p>
 
-        {(mode === 'verifying' || mode === 'verified' || mode === 'verify-error') ? (
-          <div className="auth-status">
-            {mode === 'verifying' && <p className="auth-info">Verifying your email…</p>}
-            {mode === 'verified' && (
-              <>
-                <p className="auth-info">{info}</p>
-                <button className="auth-link-btn" onClick={() => { setMode('login'); setInfo('') }}>
-                  Go to Sign In
-                </button>
-              </>
-            )}
-            {mode === 'verify-error' && (
-              <>
-                <p className="auth-error">{error}</p>
-                <button className="auth-link-btn" onClick={() => { setMode('login'); setError('') }}>
-                  Back to Sign In
-                </button>
-              </>
-            )}
-          </div>
-        ) : (
-          <>
+        <>
             {(mode === 'login' || mode === 'register') && (
               <div className="auth-tabs">
                 <button
@@ -346,11 +297,8 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
               </button>
             )}
 
-            {mode === 'register' && (
-              <p className="auth-hint">You'll receive a verification email after registering.</p>
-            )}
           </>
-        )}
+
 
         {onLegal && (
           <div className="auth-legal-links">
