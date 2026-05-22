@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, BackgroundTasks, status
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -6,8 +6,7 @@ from typing import List
 import models
 import schemas
 from database import engine, get_db, SessionLocal
-from datetime import datetime, timedelta, timezone
-from auth import hash_password, verify_password, create_access_token, get_current_user, generate_token
+from auth import hash_password, verify_password, create_access_token, get_current_user
 from deepgram import DeepgramClient, PrerecordedOptions
 import anthropic
 import os

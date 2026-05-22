@@ -48,7 +48,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setInfo('')
     setLoading(true)
 
     try {

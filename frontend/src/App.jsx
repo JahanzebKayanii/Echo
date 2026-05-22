@@ -35,7 +35,6 @@ function App() {
   const [activeTag, setActiveTag] = useState(null)
   const [stats, setStats] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
   const { toasts, showToast } = useToast()
 
   useEffect(() => {
