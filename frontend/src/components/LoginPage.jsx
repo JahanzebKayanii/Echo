@@ -7,11 +7,8 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState('')
-  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
-  const [resetToken, setResetToken] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
   function handleGithubLogin() {
@@ -47,15 +44,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
     onError: () => setError('Google sign-in was cancelled or failed.'),
   })
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const resetTok = params.get('reset')
-    if (resetTok) {
-      setResetToken(resetTok)
-      setMode('reset')
-      window.history.replaceState({}, '', '/')
-    }
-  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -64,32 +52,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
     setLoading(true)
 
     try {
-      if (mode === 'forgot') {
-        const res = await fetch(`${API}/auth/forgot-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        })
-        const data = await res.json()
-        setInfo(data.message)
-        setEmail('')
-        return
-      }
-
-      if (mode === 'reset') {
-        const res = await fetch(`${API}/auth/reset-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: resetToken, new_password: newPassword }),
-        })
-        const data = await res.json()
-        if (!res.ok) { setError(data.detail || 'Reset failed.'); return }
-        setInfo(data.message)
-        setMode('login')
-        setNewPassword('')
-        return
-      }
-
       const endpoint = mode === 'login' ? '/auth/login' : '/auth/register'
       const res = await fetch(`${API}${endpoint}`, {
         method: 'POST',
@@ -114,7 +76,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
 
   const titles = {
     login: 'Sign In', register: 'Create Account',
-    forgot: 'Reset Password', reset: 'New Password',
   }
 
   return (
@@ -133,17 +94,13 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
               <div className="auth-tabs">
                 <button
                   className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-                  onClick={() => { setMode('login'); setError(''); setInfo('') }}
+                  onClick={() => { setMode('login'); setError('') }}
                 >Sign In</button>
                 <button
                   className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
-                  onClick={() => { setMode('register'); setError(''); setInfo('') }}
+                  onClick={() => { setMode('register'); setError('') }}
                 >Create Account</button>
               </div>
-            )}
-
-            {(mode === 'forgot' || mode === 'reset') && (
-              <p className="auth-mode-title">{titles[mode]}</p>
             )}
 
             <form className="auth-form" onSubmit={handleSubmit}>
@@ -155,15 +112,13 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
                   onChange={e => setName(e.target.value)}
                 />
               )}
-              {(mode === 'login' || mode === 'register' || mode === 'forgot') && (
-                <input
-                  type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                />
-              )}
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
               {(mode === 'login' || mode === 'register') && (
                 <div className="password-wrap">
                   <input
@@ -194,40 +149,7 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
                   </button>
                 </div>
               )}
-              {mode === 'reset' && (
-                <div className="password-wrap">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="New password"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    required
-                    minLength={8}
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={() => setShowPassword(v => !v)}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                        <line x1="1" y1="1" x2="23" y2="23"/>
-                      </svg>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              )}
-
               {error && <p className="auth-error">{error}</p>}
-              {info && <p className="auth-info">{info}</p>}
 
               <button type="submit" disabled={loading}>
                 {loading ? 'Please wait…' : titles[mode]}
@@ -279,23 +201,6 @@ export default function LoginPage({ onLogin, onBack, onLegal }) {
               </>
             )}
 
-            {mode === 'login' && (
-              <button
-                className="auth-link-btn"
-                onClick={() => { setMode('forgot'); setError(''); setInfo('') }}
-              >
-                Forgot your password?
-              </button>
-            )}
-
-            {(mode === 'forgot' || mode === 'reset') && (
-              <button
-                className="auth-link-btn"
-                onClick={() => { setMode('login'); setError(''); setInfo('') }}
-              >
-                Back to Sign In
-              </button>
-            )}
 
           </>
 

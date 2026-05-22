@@ -11,5 +11,4 @@ bcrypt
 passlib
 reportlab
 openpyxl
-resend
 httpx

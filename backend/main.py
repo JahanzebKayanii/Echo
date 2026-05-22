@@ -8,7 +8,6 @@ import schemas
 from database import engine, get_db, SessionLocal
 from datetime import datetime, timedelta, timezone
 from auth import hash_password, verify_password, create_access_token, get_current_user, generate_token
-import resend
 from deepgram import DeepgramClient, PrerecordedOptions
 import anthropic
 import os
@@ -55,24 +54,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-resend.api_key = os.getenv("RESEND_API_KEY", "")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-
-
-def send_reset_email(to_email: str, token: str):
-    link = f"{FRONTEND_URL}?reset={token}"
-    resend.Emails.send({
-        "from": "Echo <onboarding@resend.dev>",
-        "to": [to_email],
-        "subject": "Reset your Echo password",
-        "html": f"""
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
-            <h2 style="color:#a78bfa;margin-bottom:8px;">Echo</h2>
-            <p style="color:#334155;">Click below to reset your password. This link expires in 30 minutes.</p>
-            <a href="{link}" style="display:inline-block;margin:24px 0;background:#7c3aed;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a>
-            <p style="color:#94a3b8;font-size:13px;">If you didn't request this, ignore this email.</p>
-        </div>"""
-    })
 
 @app.get("/health")
 def health_check():
@@ -194,32 +175,6 @@ def login(body: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     return {"access_token": create_access_token(user.email), "token_type": "bearer"}
 
-@app.post("/auth/forgot-password")
-def forgot_password(body: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == body.email).first()
-    if user:
-        token = generate_token()
-        user.reset_token = token
-        user.reset_token_expires = datetime.now(timezone.utc) + timedelta(minutes=30)
-        db.commit()
-        try:
-            send_reset_email(body.email, token)
-        except Exception as e:
-            print(f"Reset email error: {e}")
-    return {"message": "If that email exists, a reset link has been sent."}
-
-@app.post("/auth/reset-password")
-def reset_password(body: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.reset_token == body.token).first()
-    if not user or not user.reset_token_expires:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
-    if datetime.now(timezone.utc) > user.reset_token_expires:
-        raise HTTPException(status_code=400, detail="Reset link has expired. Request a new one.")
-    user.hashed_password = hash_password(body.new_password)
-    user.reset_token = None
-    user.reset_token_expires = None
-    db.commit()
-    return {"message": "Password reset successfully. You can now sign in."}
 
 @app.post("/meetings", response_model=schemas.MeetingResponse)
 def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
