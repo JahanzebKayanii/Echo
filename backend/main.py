@@ -252,15 +252,8 @@ def reset_password(body: schemas.ResetPasswordRequest, db: Session = Depends(get
     db.commit()
     return {"message": "Password reset successfully. You can now sign in."}
 
-FREE_MEETING_LIMIT = 5
-FREE_FILE_SIZE_LIMIT = 100 * 1024 * 1024   # 100 MB
-FREE_DURATION_LIMIT = 2 * 3600              # 2 hours in seconds
-
 @app.post("/meetings", response_model=schemas.MeetingResponse)
 def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    count = db.query(models.Meeting).filter(models.Meeting.user_id == current_user.id).count()
-    if not current_user.is_pro and count >= FREE_MEETING_LIMIT:
-        raise HTTPException(status_code=403, detail=f"Free plan limit reached ({FREE_MEETING_LIMIT} meetings). Delete a meeting to make room.")
     db_meeting = models.Meeting(**meeting.model_dump(), user_id=current_user.id)
     db.add(db_meeting)
     db.commit()
@@ -320,8 +313,6 @@ async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Sessio
     filepath = os.path.join("uploads", filename)
 
     content = await file.read()
-    if not current_user.is_pro and len(content) > FREE_FILE_SIZE_LIMIT:
-        raise HTTPException(status_code=413, detail="File exceeds the 100 MB free plan limit. Upgrade to Pro for larger files.")
     with open(filepath, "wb") as f:
         f.write(content)
 
@@ -331,7 +322,7 @@ async def upload_audio(meeting_id: int, file: UploadFile = File(...), db: Sessio
     db.refresh(meeting)
     return meeting
 
-def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False, language: str = 'en'):
+def run_transcription(filepath: str, meeting_id: int, language: str = 'en'):
     db = SessionLocal()
     try:
         print(f"[transcribe] Starting for meeting {meeting_id}, file: {filepath}")
@@ -384,11 +375,6 @@ def run_transcription(filepath: str, meeting_id: int, is_pro: bool = False, lang
         if meeting:
             if utterances:
                 duration = max(u.end for u in utterances)
-                if not is_pro and duration > FREE_DURATION_LIMIT:
-                    meeting.status = "error"
-                    meeting.summary = f"Recording is {round(duration/3600, 1)}h — free plan limit is 2 hours. Upgrade to Pro for unlimited duration."
-                    db.commit()
-                    return
                 meeting.duration_seconds = duration
             meeting.status = "completed"
         db.commit()
@@ -412,7 +398,7 @@ def transcribe_meeting(meeting_id: int, body: schemas.TranscribeRequest, backgro
 
     meeting.language = body.language
     db.commit()
-    background_tasks.add_task(run_transcription, meeting.audio_path, meeting_id, current_user.is_pro, body.language)
+    background_tasks.add_task(run_transcription, meeting.audio_path, meeting_id, body.language)
     return {"message": "Transcription started"}
 
 @app.get("/meetings/{meeting_id}/transcripts", response_model=List[schemas.TranscriptResponse])
@@ -673,8 +659,6 @@ def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends
     return {
         "total_meetings": total_meetings,
         "total_hours": total_hours,
-        "meeting_limit": FREE_MEETING_LIMIT,
-        "is_pro": current_user.is_pro,
     }
 
 @app.get("/meetings/search/query", response_model=List[schemas.MeetingResponse])

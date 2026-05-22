@@ -257,36 +257,15 @@ function App() {
               <span className="stat-value">{stats.total_hours}h</span>
               <span className="stat-label">Audio Processed</span>
             </div>
-            {stats.is_pro ? (
-              <div className="stat-item usage-item">
-                <div className="usage-header">
-                  <span className="stat-label">Plan</span>
-                  <span className="pro-badge">Pro</span>
-                </div>
-                <span className="pro-sub">No limits on meetings, file size, or duration</span>
-              </div>
-            ) : (
-              <div className="stat-item usage-item">
-                <div className="usage-header">
-                  <span className="stat-label">Meetings Used</span>
-                  <span className="usage-fraction">{stats.total_meetings} of {stats.meeting_limit}</span>
-                </div>
-                <div className="usage-bar-track">
-                  <div
-                    className={`usage-bar-fill ${stats.total_meetings >= stats.meeting_limit ? 'usage-bar-full' : ''}`}
-                    style={{ width: `${Math.min((stats.total_meetings / stats.meeting_limit) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
+            <div className="stat-item">
+              <span className="stat-value">{stats.total_meetings}</span>
+              <span className="stat-label">Meetings</span>
+            </div>
           </div>
         )}
 
         <section className="create-section">
           <h2>New Meeting</h2>
-          {!stats?.is_pro && stats?.total_meetings >= stats?.meeting_limit && (
-            <p className="limit-warning">You've reached the free plan limit of {stats.meeting_limit} meetings. Delete a meeting to create a new one.</p>
-          )}
           <form onSubmit={createMeeting}>
             <input
               type="text"
@@ -310,7 +289,7 @@ function App() {
                 className="date-input"
               />
             </div>
-            <button type="submit" disabled={loading || (!stats?.is_pro && stats?.total_meetings >= stats?.meeting_limit)}>
+            <button type="submit" disabled={loading}>
               {loading ? 'Creating...' : 'Create Meeting'}
             </button>
           </form>

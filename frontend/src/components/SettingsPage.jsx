@@ -35,39 +35,15 @@ export default function SettingsPage({ onBack, onLogout, onDeleteAccount, stats,
 
       {stats && (
         <div className="settings-card">
-          <div className="settings-card-title-row">
-            <h2 className="settings-card-title">Plan & Usage</h2>
-            {stats.is_pro && <span className="pro-badge">Pro</span>}
+          <h2 className="settings-card-title">Usage</h2>
+          <div className="settings-row">
+            <span className="settings-label">Meetings</span>
+            <span className="settings-value">{stats.total_meetings}</span>
           </div>
-          {stats.is_pro ? (
-            <div className="settings-row">
-              <span className="settings-label">Plan</span>
-              <span className="settings-value">Pro — unlimited meetings, files &amp; duration</span>
-            </div>
-          ) : (
-            <>
-              <div className="settings-row">
-                <span className="settings-label">Plan</span>
-                <span className="settings-value">Free</span>
-              </div>
-              <div className="settings-row">
-                <span className="settings-label">Meetings used</span>
-                <div className="settings-usage-wrap">
-                  <div className="usage-bar-track">
-                    <div
-                      className={`usage-bar-fill ${stats.total_meetings >= stats.meeting_limit ? 'usage-bar-full' : ''}`}
-                      style={{ width: `${Math.min((stats.total_meetings / stats.meeting_limit) * 100, 100)}%` }}
-                    />
-                  </div>
-                  <span className="usage-fraction">{stats.total_meetings} of {stats.meeting_limit}</span>
-                </div>
-              </div>
-              <div className="settings-row">
-                <span className="settings-label">Audio processed</span>
-                <span className="settings-value">{stats.total_hours}h</span>
-              </div>
-            </>
-          )}
+          <div className="settings-row">
+            <span className="settings-label">Audio processed</span>
+            <span className="settings-value">{stats.total_hours}h</span>
+          </div>
         </div>
       )}
 
