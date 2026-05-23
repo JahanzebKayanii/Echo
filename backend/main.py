@@ -38,6 +38,10 @@ from sqlalchemy import text as _text
 with engine.connect() as _conn:
     try:
         _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR"))
+        _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pro BOOLEAN NOT NULL DEFAULT false"))
+        _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR"))
+        _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR"))
+        _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ"))
         _conn.commit()
     except Exception:
         pass
@@ -412,7 +416,7 @@ def identify_speakers(meeting_id: int, db: Session = Depends(get_db), current_us
 
     client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-4-20250514",
         max_tokens=512,
         messages=[{
             "role": "user",
@@ -477,7 +481,7 @@ def summarize_meeting(meeting_id: int, db: Session = Depends(get_db), current_us
 
     client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -507,7 +511,7 @@ def extract_action_items(meeting_id: int, db: Session = Depends(get_db), current
 
     client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -553,7 +557,7 @@ def chat_with_meeting(meeting_id: int, body: schemas.ChatRequest, db: Session = 
 
     client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-4-20250514",
         max_tokens=1024,
         system=f"You are an AI assistant analyzing a meeting transcript. Answer questions based on the transcript only.\n\nTranscript:\n{transcript_text}",
         messages=messages
