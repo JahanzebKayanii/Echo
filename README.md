@@ -9,6 +9,7 @@ Echo transcribes your meetings, identifies speakers, generates AI summaries, and
 ## Screenshots
 
 ![Landing Page](screenshots/landing.png)
+![Login](screenshots/login.png)
 ![Dashboard](screenshots/dashboard.png)
 ![Meeting Detail](screenshots/meeting-detail.png)
 ![AI Chat](screenshots/chat.png)
